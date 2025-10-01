@@ -1,228 +1,203 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
+    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Journal</title>
-    <!-- Prevent favicon 404 noise -->
-    <link rel="icon" href="data:,">
+    <title>Voice Journal - MindLense</title>
+    <link rel="stylesheet" href="{% static 'css/home.css' %}" />
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+        /* Voice Journal specific styles */
+        .voice-hero {
+            padding: 40px 0;
+            background: linear-gradient(180deg, #ffffff, #f7fbff 55%, #f6fffb);
         }
         
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            padding: 30px;
+        .voice-hero-content {
             text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
         }
         
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
+        .voice-hero h1 {
+            font-size: 36px;
+            line-height: 1.2;
+            margin: 0 0 12px;
+            color: #101828;
         }
         
-        .content {
-            padding: 30px;
+        .voice-hero p {
+            font-size: 18px;
+            color: #475467;
+            margin: 0 0 32px;
         }
         
         .recording-section {
-            text-align: center;
-            margin-bottom: 40px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            margin: 32px 0;
+            box-shadow: var(--shadow-sm);
         }
         
         .record-button {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
+            background: var(--color-secondary);
+            color: #fff;
             border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            border-radius: 50px;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: var(--radius-md);
             cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 10px;
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+            transition: all 0.2s ease;
+            margin: 8px;
+            box-shadow: var(--shadow-sm);
         }
         
         .record-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
         
         .record-button:disabled {
-            background: #ccc;
+            background: #d1d5db;
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
         }
         
         .stop-button {
-            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
-            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
-        }
-        
-        .stop-button:hover {
-            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.6);
+            background: var(--color-primary);
         }
         
         .audio-player {
-            margin: 20px 0;
+            margin: 24px 0;
             width: 100%;
+            border-radius: var(--radius-md);
         }
         
         .status {
             margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 16px;
+            border-radius: var(--radius-md);
             text-align: center;
-            font-weight: bold;
+            font-weight: 600;
+            border: 1px solid;
         }
         
         .status.recording {
-            background: #ffe6e6;
-            color: #d63031;
-            border: 2px solid #d63031;
+            background: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
         }
         
         .status.processing {
-            background: #e6f3ff;
-            color: #0984e3;
-            border: 2px solid #0984e3;
+            background: #eff6ff;
+            color: var(--color-primary);
+            border-color: #dbeafe;
         }
         
         .status.success {
-            background: #e6ffe6;
-            color: #00b894;
-            border: 2px solid #00b894;
+            background: #f0fdf4;
+            color: #16a34a;
+            border-color: #bbf7d0;
         }
         
         .status.error {
-            background: #ffe6e6;
-            color: #d63031;
-            border: 2px solid #d63031;
+            background: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
         }
         
         .results {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
+            margin-top: 32px;
+            padding: 24px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
             display: none;
         }
         
         .result-section {
             margin-bottom: 20px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            border-left: 4px solid #4facfe;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: var(--radius-md);
+            border-left: 4px solid var(--color-secondary);
         }
         
         .result-section h3 {
-            margin: 0 0 10px 0;
-            color: #2d3436;
-            font-size: 1.2em;
+            margin: 0 0 12px 0;
+            color: #101828;
+            font-size: 18px;
+            font-weight: 700;
         }
         
         .result-content {
-            color: #636e72;
+            color: #475467;
             line-height: 1.6;
         }
         
-        .score {
-            font-weight: bold;
-            color: #4facfe;
-        }
-        
-        .recent-entries {
-            margin-top: 40px;
-        }
-        
-        .recent-entries h2 {
-            color: #2d3436;
-            border-bottom: 2px solid #4facfe;
-            padding-bottom: 10px;
-        }
-        
-        .entry-item {
-            background: white;
-            margin: 10px 0;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #4facfe;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        
-        .entry-date {
-            color: #636e72;
-            font-size: 0.9em;
-        }
-        
-        .entry-transcription {
-            margin: 10px 0;
-            color: #2d3436;
-        }
-        
-        .entry-sentiments {
-            display: flex;
-            gap: 15px;
-            margin-top: 10px;
-        }
-        
         .sentiment-badge {
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8em;
-            font-weight: bold;
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 4px 8px 4px 0;
         }
         
         .sentiment-positive {
-            background: #d4edda;
-            color: #155724;
+            background: #dcfce7;
+            color: #166534;
         }
         
         .sentiment-negative {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fee2e2;
+            color: #991b1b;
         }
         
         .sentiment-neutral {
-            background: #e2e3e5;
-            color: #383d41;
+            background: #f3f4f6;
+            color: #374151;
         }
         
         .emotion-badge {
-            background: #cce5ff;
-            color: #004085;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .voice-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: var(--radius-md);
+            background: var(--color-secondary);
+            display: grid;
+            place-items: center;
+            font-size: 24px;
+            margin: 0 auto 16px;
+            color: #fff;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🎤 Voice Journal</h1>
-            <p>Record your thoughts and get instant analysis</p>
-        </div>
-        
-        <div class="content">
+    {% include 'partials/nav.html' %}
+
+    <main>
+        <section class="voice-hero">
+            <div class="container voice-hero-content">
+                <div class="voice-icon">🎤</div>
+                <h1>Voice Journal</h1>
+                <p>Enregistrez vos pensées et obtenez une analyse instantanée de vos émotions</p>
+            </div>
+        </section>
+
+        <section class="container">
             <div class="recording-section">
-                <button id="recordButton" class="record-button">🎤 Start Recording</button>
-                <button id="stopButton" class="record-button stop-button" disabled>⏹️ Stop & Analyze</button>
+                <button id="recordButton" class="record-button">🎤 Commencer l'enregistrement</button>
+                <button id="stopButton" class="record-button stop-button" disabled>⏹️ Arrêter et analyser</button>
                 
                 <div id="status" class="status" style="display: none;"></div>
                 
@@ -236,37 +211,19 @@
                 </div>
                 
                 <div class="result-section">
-                    <h3>😊 Text Sentiment</h3>
+                    <h3>😊 Sentiment du texte</h3>
                     <div id="textSentiment" class="result-content"></div>
                 </div>
                 
                 <div class="result-section">
-                    <h3>🎵 Audio Emotion</h3>
+                    <h3>🎵 Émotion audio</h3>
                     <div id="audioEmotion" class="result-content"></div>
                 </div>
             </div>
-            
-            {% if recent_entries %}
-            <div class="recent-entries">
-                <h2>📚 Recent Entries</h2>
-                {% for entry in recent_entries %}
-                <div class="entry-item">
-                    <div class="entry-date">{{ entry.created_at|date:"F d, Y H:i" }}</div>
-                    <div class="entry-transcription">{{ entry.transcription|truncatewords:20 }}</div>
-                    <div class="entry-sentiments">
-                        <span class="sentiment-badge sentiment-{{ entry.text_sentiment|lower }}">
-                            Text: {{ entry.text_sentiment }} ({{ entry.text_sentiment_score|floatformat:2 }})
-                        </span>
-                        <span class="emotion-badge">
-                            Audio: {{ entry.audio_emotion }} ({{ entry.audio_emotion_score|floatformat:2 }})
-                        </span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-        </div>
-    </div>
+        </section>
+    </main>
+
+    {% include 'partials/footer.html' %}
 
     <script>
         class VoiceJournal {
@@ -317,13 +274,13 @@
                     console.log('[VoiceJournal] Recording started');
                     this.isRecording = true;
                     
-                    this.updateUI('recording', '🔴 Recording... Click "Stop & Analyze" when done');
+                    this.updateUI('recording', '🔴 Enregistrement en cours... Cliquez sur "Arrêter et analyser" quand vous avez terminé');
                     this.recordButton.disabled = true;
                     this.stopButton.disabled = false;
                     
                 } catch (error) {
                     console.error('Error accessing microphone:', error);
-                    this.updateUI('error', '❌ Error accessing microphone. Please check permissions.');
+                    this.updateUI('error', '❌ Erreur d\'accès au microphone. Veuillez vérifier les permissions.');
                 }
             }
             
@@ -333,7 +290,7 @@
                     this.mediaRecorder.stop();
                     this.isRecording = false;
                     
-                    this.updateUI('processing', '⏳ Processing your audio...');
+                    this.updateUI('processing', '⏳ Traitement de votre audio...');
                     this.stopButton.disabled = true;
                 }
             }
@@ -375,16 +332,16 @@
                     
                     if (result.success) {
                         this.displayResults(result);
-                        this.updateUI('success', '✅ Analysis complete!');
+                        this.updateUI('success', '✅ Analyse terminée avec succès !');
                     } else {
-                        const missing = Array.isArray(result?.missing) ? `\nMissing: ${result.missing.join(', ')}` : '';
-                        this.updateUI('error', `❌ Error: ${result?.error || 'Unknown error'}` + missing);
+                        const missing = Array.isArray(result?.missing) ? `\nManquant: ${result.missing.join(', ')}` : '';
+                        this.updateUI('error', `❌ Erreur: ${result?.error || 'Erreur inconnue'}` + missing);
                         console.error('[VoiceJournal] Error result:', result);
                     }
                     
                 } catch (error) {
                     console.error('Error processing audio:', error);
-                    this.updateUI('error', '❌ Error processing audio. Please try again.');
+                    this.updateUI('error', '❌ Erreur lors du traitement audio. Veuillez réessayer.');
                 } finally {
                     this.recordButton.disabled = false;
                     this.stopButton.disabled = true;
