@@ -10,10 +10,12 @@
       {% if request.user.is_authenticated %}
         <a href="{% url 'note_list' %}">Mes Notes</a>
         <a href="{% url 'dashboard' %}">Dashboard</a>
+        <a href="{% url 'voice_journal' %}">Voix</a>
+        <a href="{% url 'voice_journal_list' %}">Mes Voix</a>
       {% else %}
         <a href="#notes">Notes</a>
+        <a href="#voice">Voix</a>
       {% endif %}
-     <a href="{% url 'voice_journal' %}">Voix</a>
 
       <a href="#photos">Photos</a>
       <a href="#resumes">Résumés</a>

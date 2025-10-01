@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    {% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Enregistrements Vocaux - MindLense</title>
+    <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+    <style>
+        .voice-hero {
+            padding: 40px 0;
+            background: linear-gradient(180deg, #ffffff, #f7fbff 55%, #f6fffb);
+        }
+        
+        .voice-hero-content {
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .voice-hero h1 {
+            font-size: 36px;
+            line-height: 1.2;
+            margin: 0 0 12px;
+            color: #101828;
+        }
+        
+        .voice-hero p {
+            font-size: 18px;
+            color: #475467;
+            margin: 0 0 32px;
+        }
+        
+        .voice-entries-grid {
+            display: grid;
+            gap: 20px;
+            margin: 32px 0;
+        }
+        
+        .voice-entry-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+        
+        .voice-entry-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        
+        .voice-entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        
+        .voice-entry-date {
+            color: #667085;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .voice-entry-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        
+        .action-btn.favorite {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .action-btn.favorite:hover {
+            background: #fde68a;
+        }
+        
+        .action-btn.delete {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .action-btn.delete:hover {
+            background: #fecaca;
+        }
+        
+        .action-btn.view {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .action-btn.view:hover {
+            background: #bfdbfe;
+        }
+        
+        .voice-entry-transcription {
+            color: #101828;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            font-size: 16px;
+        }
+        
+        .voice-entry-analysis {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .analysis-badge {
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .sentiment-positive {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .sentiment-negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .sentiment-neutral {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        
+        .emotion-badge {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 64px 24px;
+            color: #667085;
+        }
+        
+        .empty-state h3 {
+            color: #101828;
+            margin-bottom: 8px;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin: 32px 0;
+        }
+        
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            color: #475467;
+        }
+        
+        .pagination .current {
+            background: var(--color-primary);
+            color: #fff;
+            border-color: var(--color-primary);
+        }
+        
+        .pagination a:hover {
+            background: #f9fafb;
+        }
+    </style>
+</head>
+<body>
+    {% include 'partials/nav.html' %}
+
+    <main>
+        <section class="voice-hero">
+            <div class="container voice-hero-content">
+                <div class="voice-icon">🎤</div>
+                <h1>Mes Enregistrements Vocaux</h1>
+                <p>Retrouvez tous vos enregistrements vocaux et leurs analyses</p>
+            </div>
+        </section>
+
+        <section class="container">
+            {% if voice_entries %}
+                <div class="voice-entries-grid">
+                    {% for entry in voice_entries %}
+                    <div class="voice-entry-card">
+                        <div class="voice-entry-header">
+                            <div class="voice-entry-date">
+                                {{ entry.created_at|date:"d F Y à H:i" }}
+                            </div>
+                            <div class="voice-entry-actions">
+                                <a href="{% url 'voice_journal_detail' entry.pk %}" class="action-btn view">Voir</a>
+                                <a href="{% url 'voice_journal_toggle_favorite' entry.pk %}" class="action-btn favorite">
+                                    {% if entry.is_favorite %}⭐ Retiré{% else %}⭐ Favori{% endif %}
+                                </a>
+                                <a href="{% url 'voice_journal_delete' entry.pk %}" class="action-btn delete" 
+                                   onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet enregistrement ?')">Supprimer</a>
+                            </div>
+                        </div>
+                        
+                        <div class="voice-entry-transcription">
+                            {{ entry.transcription_preview }}
+                        </div>
+                        
+                        <div class="voice-entry-analysis">
+                            <span class="analysis-badge sentiment-{{ entry.text_sentiment|lower }}">
+                                Sentiment: {{ entry.text_sentiment }} ({{ entry.text_sentiment_score|floatformat:2 }})
+                            </span>
+                            <span class="analysis-badge emotion-badge">
+                                Émotion: {{ entry.audio_emotion }} ({{ entry.audio_emotion_score|floatformat:2 }})
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Pagination -->
+                {% if page_obj.has_other_pages %}
+                <div class="pagination">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1">&laquo; Première</a>
+                        <a href="?page={{ page_obj.previous_page_number }}">Précédente</a>
+                    {% endif %}
+                    
+                    <span class="current">
+                        Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+                    </span>
+                    
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}">Suivante</a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}">Dernière &raquo;</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="empty-state">
+                    <h3>Aucun enregistrement vocal</h3>
+                    <p>Vous n'avez pas encore d'enregistrements vocaux.</p>
+                    <a href="{% url 'voice_journal' %}" class="btn-primary">Créer mon premier enregistrement</a>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    {% include 'partials/footer.html' %}
+</body>
+</html>

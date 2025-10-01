@@ -1,12 +1,16 @@
 import os
 import tempfile
 import json
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
+from .models import VoiceJournal
 import time
 
 # Import ML libraries with error handling
@@ -148,18 +152,78 @@ def convert_to_wav(audio_file):
         return None
 
 
+@login_required
 def voice_journal_view(request):
-    """Main voice journal page"""
-    if request.method == 'GET':
-        return render(request, 'voice_journal/voice_journal.html')
-    
+    """Main voice journal page - requires login"""
     return render(request, 'voice_journal/voice_journal.html')
+
+
+@login_required
+def voice_journal_list(request):
+    """List all voice journal entries for the current user"""
+    voice_entries = VoiceJournal.objects.filter(user=request.user)
+    
+    # Pagination
+    paginator = Paginator(voice_entries, 10)  # 10 entries per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'voice_entries': page_obj,
+    }
+    return render(request, 'voice_journal/voice_journal_list.html', context)
+
+
+@login_required
+def voice_journal_detail(request, pk):
+    """View details of a specific voice journal entry"""
+    try:
+        voice_entry = VoiceJournal.objects.get(pk=pk, user=request.user)
+    except VoiceJournal.DoesNotExist:
+        messages.error(request, "Cet enregistrement vocal n'existe pas.")
+        return redirect('voice_journal_list')
+    
+    context = {
+        'voice_entry': voice_entry,
+    }
+    return render(request, 'voice_journal/voice_journal_detail.html', context)
+
+
+@login_required
+def voice_journal_delete(request, pk):
+    """Delete a voice journal entry"""
+    try:
+        voice_entry = VoiceJournal.objects.get(pk=pk, user=request.user)
+        voice_entry.delete()
+        messages.success(request, "L'enregistrement vocal a été supprimé avec succès.")
+    except VoiceJournal.DoesNotExist:
+        messages.error(request, "Cet enregistrement vocal n'existe pas.")
+    
+    return redirect('voice_journal_list')
+
+
+@login_required
+def voice_journal_toggle_favorite(request, pk):
+    """Toggle favorite status of a voice journal entry"""
+    try:
+        voice_entry = VoiceJournal.objects.get(pk=pk, user=request.user)
+        voice_entry.is_favorite = not voice_entry.is_favorite
+        voice_entry.save()
+        
+        status = "ajouté aux favoris" if voice_entry.is_favorite else "retiré des favoris"
+        messages.success(request, f"L'enregistrement vocal a été {status}.")
+    except VoiceJournal.DoesNotExist:
+        messages.error(request, "Cet enregistrement vocal n'existe pas.")
+    
+    return redirect('voice_journal_list')
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
 def process_audio(request):
-    """Process uploaded audio file"""
+    """Process uploaded audio file and save to database"""
     if not ML_LIBRARIES_AVAILABLE:
         return JsonResponse({'error': 'ML libraries not available. Please install required packages.', 'missing': ML_MISSING_MODULES}, status=500)
         
@@ -181,9 +245,10 @@ def process_audio(request):
                 return JsonResponse({'error': 'Failed to convert audio'}, status=500)
             t_conv1 = time.time()
             
-            # Save WAV file
-            wav_filename = f"voice_journal_anon_{temp_path.split('/')[-1]}.wav"
-            wav_path = default_storage.save(f'audio/{wav_filename}', ContentFile(wav_buffer.getvalue()))
+            # Save WAV file with user-specific naming
+            user_tag = request.user.id
+            wav_filename = f"voice_journal_{user_tag}_{temp_path.split('/')[-1]}.wav"
+            wav_path = default_storage.save(f'voice_journal/audio/{wav_filename}', ContentFile(wav_buffer.getvalue()))
             wav_full_path = default_storage.path(wav_path)
             
             # Transcribe audio using Whisper (Hugging Face transformers)
@@ -221,6 +286,17 @@ def process_audio(request):
             audio_emotion, audio_emotion_score = analyze_audio_emotion(wav_full_path)
             t_em1 = time.time()
             
+            # Save to database
+            voice_entry = VoiceJournal.objects.create(
+                user=request.user,
+                audio_file=wav_path,
+                transcription=transcription,
+                text_sentiment=text_sentiment,
+                text_sentiment_score=text_sentiment_score,
+                audio_emotion=audio_emotion,
+                audio_emotion_score=audio_emotion_score
+            )
+            
             # Clean up temporary file
             default_storage.delete(temp_path)
             
@@ -232,6 +308,7 @@ def process_audio(request):
                 'audio_emotion': audio_emotion,
                 'audio_emotion_score': audio_emotion_score,
                 'audio_url': default_storage.url(wav_path),
+                'entry_id': voice_entry.id,
                 'timings_ms': {
                     'convert': int((t_conv1 - t_conv0) * 1000),
                     'asr': int((t_asr1 - t_asr0) * 1000),
