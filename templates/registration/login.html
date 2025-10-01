@@ -1,4 +1,5 @@
 {% load static %}
+{% load form_tags %}
 <!DOCTYPE html>
 <html lang="fr">
   <head>
@@ -8,31 +9,28 @@
     <link rel="stylesheet" href="{% static 'css/home.css' %}" />
   </head>
   <body>
-    <header class="navbar">
-      <div class="container nav-inner">
-        <a class="brand" href="/"><span class="brand-mark">ML</span>MindLense</a>
-      </div>
-    </header>
+    {% include 'partials/nav.html' %}
     <main class="container" style="max-width:560px;padding:40px 0;">
-      <h1 style="margin:0 0 12px;color:#101828;">Se connecter</h1>
-      <p style="margin:0 0 18px;color:#667085;">Accédez à votre journal personnel.</p>
-      <form method="post" class="feature-card" style="padding:20px;">
+      <h1 class="auth-title">Se connecter</h1>
+      <p class="auth-sub">Accédez à votre journal personnel.</p>
+      <form method="post" class="auth-card">
         {% csrf_token %}
         {{ form.non_field_errors }}
-        <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="form-grid">
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Nom d’utilisateur</label>
-            {{ form.username }}
+            {{ form.username|add_class:'input' }}
           </div>
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Mot de passe</label>
-            {{ form.password }}
+            {{ form.password|add_class:'input' }}
           </div>
           <button type="submit" class="btn-primary" style="width:100%;">Se connecter</button>
         </div>
       </form>
-      <p style="margin-top:12px;">Pas de compte ? <a href="{% url 'signup' %}">Créer un compte</a></p>
+      <p style="margin-top:12px;">Pas de compte ? <a href="{% url 'signup' %}" class="muted-link">Créer un compte</a></p>
     </main>
+    {% include 'partials/footer.html' %}
   </body>
   </html>
 

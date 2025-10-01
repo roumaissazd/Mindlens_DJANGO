@@ -1,4 +1,5 @@
 {% load static %}
+{% load form_tags %}
 <!DOCTYPE html>
 <html lang="fr">
   <head>
@@ -8,39 +9,37 @@
     <link rel="stylesheet" href="{% static 'css/home.css' %}" />
   </head>
   <body>
-    <header class="navbar">
-      <div class="container nav-inner">
-        <a class="brand" href="/"><span class="brand-mark">ML</span>MindLense</a>
-      </div>
-    </header>
+    {% include 'partials/nav.html' %}
     <main class="container" style="max-width:560px;padding:40px 0;">
-      <h1 style="margin:0 0 12px;color:#101828;">Créer un compte</h1>
-      <p style="margin:0 0 18px;color:#667085;">Rejoignez MindLense et commencez à écrire.</p>
-      <form method="post" class="feature-card" style="padding:20px;">
+      <h1 class="auth-title">Créer un compte</h1>
+      <p class="auth-sub">Rejoignez MindLense et commencez à écrire.</p>
+      <form method="post" class="auth-card">
         {% csrf_token %}
         {{ form.non_field_errors }}
-        <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="form-grid">
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Nom d’utilisateur</label>
-            {{ form.username }}
+            {{ form.username|add_class:'input' }}
           </div>
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Email</label>
-            {{ form.email }}
+            {{ form.email|add_class:'input' }}
           </div>
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Mot de passe</label>
-            {{ form.password1 }}
+            {{ form.password1|add_class:'input' }}
+            <div class="help">8+ caractères, mélange conseillé lettres/chiffres.</div>
           </div>
           <div>
             <label style="display:block;font-weight:700;color:#101828;">Confirmer le mot de passe</label>
-            {{ form.password2 }}
+            {{ form.password2|add_class:'input' }}
           </div>
           <button type="submit" class="btn-primary" style="width:100%;">Créer un compte</button>
         </div>
       </form>
-      <p style="margin-top:12px;">Déjà inscrit ? <a href="{% url 'login' %}">Se connecter</a></p>
+      <p style="margin-top:12px;">Déjà inscrit ? <a href="{% url 'login' %}" class="muted-link">Se connecter</a></p>
     </main>
+    {% include 'partials/footer.html' %}
   </body>
   </html>
 

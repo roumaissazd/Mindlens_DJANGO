@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.contrib.auth import login as auth_login
+from django.contrib.auth import login as auth_login, logout as auth_logout
 from .forms import SignUpForm
 
 
@@ -18,4 +18,11 @@ def signup(request):
             return redirect('home')
     else:
         form = SignUpForm()
-    return render(request, 'signup.html', { 'form': form })
+    return render(request, 'registration/signup.html', { 'form': form })
+
+
+def logout(request):
+    """Log out the user via GET and redirect to home."""
+    auth_logout(request)
+    messages.success(request, "À bientôt ! Vous êtes déconnecté(e).")
+    return redirect('home')
