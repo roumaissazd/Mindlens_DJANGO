@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Supprimer la Note – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="delete-container">
+    <div class="container">
+      <div class="delete-card">
+        <div class="delete-icon">⚠️</div>
+        <h1 class="delete-title">Supprimer cette note ?</h1>
+        <p class="delete-warning">
+          Cette action est irréversible. La note sera définitivement supprimée.
+        </p>
+
+        <div class="note-preview">
+          <h3 class="preview-title">
+            {% if note.title %}
+              {{ note.title }}
+            {% else %}
+              Note du {{ note.created_at|date:"d/m/Y" }}
+            {% endif %}
+          </h3>
+          <p class="preview-content">{{ note.content|truncatewords:50 }}</p>
+          <div class="preview-meta">
+            <span>📅 {{ note.created_at|date:"d/m/Y" }}</span>
+            {% if note.category %}
+              <span>{{ note.get_category_icon }} {{ note.get_category_display }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <form method="post" class="delete-form">
+          {% csrf_token %}
+          <div class="delete-actions">
+            <button type="submit" class="btn-danger">
+              🗑️ Oui, supprimer
+            </button>
+            <a href="{% url 'note_detail' note.pk %}" class="btn-secondary">
+              Annuler
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
+
