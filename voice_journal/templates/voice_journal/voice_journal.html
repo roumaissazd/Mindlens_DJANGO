@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Journal</title>
+    <!-- Prevent favicon 404 noise -->
+    <link rel="icon" href="data:,">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .recording-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .record-button {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .record-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+        }
+        
+        .record-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .stop-button {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+        }
+        
+        .stop-button:hover {
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.6);
+        }
+        
+        .audio-player {
+            margin: 20px 0;
+            width: 100%;
+        }
+        
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status.recording {
+            background: #ffe6e6;
+            color: #d63031;
+            border: 2px solid #d63031;
+        }
+        
+        .status.processing {
+            background: #e6f3ff;
+            color: #0984e3;
+            border: 2px solid #0984e3;
+        }
+        
+        .status.success {
+            background: #e6ffe6;
+            color: #00b894;
+            border: 2px solid #00b894;
+        }
+        
+        .status.error {
+            background: #ffe6e6;
+            color: #d63031;
+            border: 2px solid #d63031;
+        }
+        
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .result-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #4facfe;
+        }
+        
+        .result-section h3 {
+            margin: 0 0 10px 0;
+            color: #2d3436;
+            font-size: 1.2em;
+        }
+        
+        .result-content {
+            color: #636e72;
+            line-height: 1.6;
+        }
+        
+        .score {
+            font-weight: bold;
+            color: #4facfe;
+        }
+        
+        .recent-entries {
+            margin-top: 40px;
+        }
+        
+        .recent-entries h2 {
+            color: #2d3436;
+            border-bottom: 2px solid #4facfe;
+            padding-bottom: 10px;
+        }
+        
+        .entry-item {
+            background: white;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4facfe;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .entry-date {
+            color: #636e72;
+            font-size: 0.9em;
+        }
+        
+        .entry-transcription {
+            margin: 10px 0;
+            color: #2d3436;
+        }
+        
+        .entry-sentiments {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .sentiment-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .sentiment-positive {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .sentiment-negative {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .sentiment-neutral {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+        
+        .emotion-badge {
+            background: #cce5ff;
+            color: #004085;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Voice Journal</h1>
+            <p>Record your thoughts and get instant analysis</p>
+        </div>
+        
+        <div class="content">
+            <div class="recording-section">
+                <button id="recordButton" class="record-button">🎤 Start Recording</button>
+                <button id="stopButton" class="record-button stop-button" disabled>⏹️ Stop & Analyze</button>
+                
+                <div id="status" class="status" style="display: none;"></div>
+                
+                <audio id="audioPlayer" class="audio-player" controls style="display: none;"></audio>
+            </div>
+            
+            <div id="results" class="results">
+                <div class="result-section">
+                    <h3>📝 Transcription</h3>
+                    <div id="transcription" class="result-content"></div>
+                </div>
+                
+                <div class="result-section">
+                    <h3>😊 Text Sentiment</h3>
+                    <div id="textSentiment" class="result-content"></div>
+                </div>
+                
+                <div class="result-section">
+                    <h3>🎵 Audio Emotion</h3>
+                    <div id="audioEmotion" class="result-content"></div>
+                </div>
+            </div>
+            
+            {% if recent_entries %}
+            <div class="recent-entries">
+                <h2>📚 Recent Entries</h2>
+                {% for entry in recent_entries %}
+                <div class="entry-item">
+                    <div class="entry-date">{{ entry.created_at|date:"F d, Y H:i" }}</div>
+                    <div class="entry-transcription">{{ entry.transcription|truncatewords:20 }}</div>
+                    <div class="entry-sentiments">
+                        <span class="sentiment-badge sentiment-{{ entry.text_sentiment|lower }}">
+                            Text: {{ entry.text_sentiment }} ({{ entry.text_sentiment_score|floatformat:2 }})
+                        </span>
+                        <span class="emotion-badge">
+                            Audio: {{ entry.audio_emotion }} ({{ entry.audio_emotion_score|floatformat:2 }})
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        class VoiceJournal {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                this.chunkCount = 0;
+                
+                this.recordButton = document.getElementById('recordButton');
+                this.stopButton = document.getElementById('stopButton');
+                this.status = document.getElementById('status');
+                this.audioPlayer = document.getElementById('audioPlayer');
+                this.results = document.getElementById('results');
+                
+                this.setupEventListeners();
+                console.log('[VoiceJournal] Initialized');
+            }
+            
+            setupEventListeners() {
+                this.recordButton.addEventListener('click', () => this.startRecording());
+                this.stopButton.addEventListener('click', () => this.stopRecording());
+                console.log('[VoiceJournal] Event listeners attached');
+            }
+            
+            async startRecording() {
+                try {
+                    console.log('[VoiceJournal] Requesting microphone permission...');
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    console.log('[VoiceJournal] Microphone stream obtained');
+                    
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.audioChunks = [];
+                    this.chunkCount = 0;
+                    
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                        this.chunkCount += 1;
+                        console.log(`[VoiceJournal] ondataavailable: chunk ${this.chunkCount}, size=${event.data?.size}`);
+                    };
+                    
+                    this.mediaRecorder.onstop = () => {
+                        console.log(`[VoiceJournal] Recorder stopped. Total chunks: ${this.chunkCount}`);
+                        this.processRecording();
+                    };
+                    
+                    this.mediaRecorder.start();
+                    console.log('[VoiceJournal] Recording started');
+                    this.isRecording = true;
+                    
+                    this.updateUI('recording', '🔴 Recording... Click "Stop & Analyze" when done');
+                    this.recordButton.disabled = true;
+                    this.stopButton.disabled = false;
+                    
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                    this.updateUI('error', '❌ Error accessing microphone. Please check permissions.');
+                }
+            }
+            
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    console.log('[VoiceJournal] Stopping recording...');
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                    
+                    this.updateUI('processing', '⏳ Processing your audio...');
+                    this.stopButton.disabled = true;
+                }
+            }
+            
+            async processRecording() {
+                try {
+                    console.log(`[VoiceJournal] Processing recording. Chunks: ${this.audioChunks.length}`);
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                    console.log(`[VoiceJournal] Blob created. Size=${audioBlob.size} type=${audioBlob.type}`);
+                    
+                    // Show the recorded audio
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    this.audioPlayer.src = audioUrl;
+                    this.audioPlayer.style.display = 'block';
+                    console.log('[VoiceJournal] Audio preview ready');
+                    
+                    // Send to server for processing
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'recording.webm');
+                    console.log('[VoiceJournal] Sending fetch -> /voice-journal/process-audio/');
+                    const t0 = performance.now();
+                    
+                    const response = await fetch('/voice-journal/process-audio/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': this.getCSRFToken()
+                        }
+                    });
+                    const t1 = performance.now();
+                    console.log(`[VoiceJournal] Fetch completed. status=${response.status} (${(t1 - t0).toFixed(0)} ms)`);
+                    let result = null;
+                    try {
+                        result = await response.json();
+                    } catch (e) {
+                        console.warn('[VoiceJournal] Failed to parse JSON response', e);
+                    }
+                    console.log('[VoiceJournal] Server response:', result);
+                    
+                    if (result.success) {
+                        this.displayResults(result);
+                        this.updateUI('success', '✅ Analysis complete!');
+                    } else {
+                        const missing = Array.isArray(result?.missing) ? `\nMissing: ${result.missing.join(', ')}` : '';
+                        this.updateUI('error', `❌ Error: ${result?.error || 'Unknown error'}` + missing);
+                        console.error('[VoiceJournal] Error result:', result);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error processing audio:', error);
+                    this.updateUI('error', '❌ Error processing audio. Please try again.');
+                } finally {
+                    this.recordButton.disabled = false;
+                    this.stopButton.disabled = true;
+                }
+            }
+            
+            displayResults(result) {
+                document.getElementById('transcription').textContent = result.transcription;
+                
+                const sentimentClass = result.text_sentiment.toLowerCase();
+                document.getElementById('textSentiment').innerHTML = `
+                    <span class="sentiment-badge sentiment-${sentimentClass}">
+                        ${result.text_sentiment} (${result.text_sentiment_score.toFixed(2)})
+                    </span>
+                `;
+                
+                document.getElementById('audioEmotion').innerHTML = `
+                    <span class="emotion-badge">
+                        ${result.audio_emotion} (${result.audio_emotion_score.toFixed(2)})
+                    </span>
+                `;
+                
+                this.results.style.display = 'block';
+                
+                // Scroll to results
+                this.results.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            updateUI(type, message) {
+                this.status.textContent = message;
+                this.status.className = `status ${type}`;
+                this.status.style.display = 'block';
+            }
+            
+            getCSRFToken() {
+                return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                       document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+            }
+        }
+        
+        // Initialize the voice journal when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new VoiceJournal();
+        });
+    </script>
+</body>
+</html>

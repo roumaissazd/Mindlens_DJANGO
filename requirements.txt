@@ -1,0 +1,16 @@
+# Core
+Django>=4.2,<5.0
+
+# ML and audio processing (CPU)
+transformers
+pydub
+librosa
+soundfile
+numpy
+scipy
+safetensors
+sentencepiece
+
+# Torch and torchaudio are installed separately for CPU wheels on Windows
+# Install with:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
