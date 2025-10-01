@@ -1,0 +1,38 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Se connecter – MindLense</title>
+    <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  </head>
+  <body>
+    <header class="navbar">
+      <div class="container nav-inner">
+        <a class="brand" href="/"><span class="brand-mark">ML</span>MindLense</a>
+      </div>
+    </header>
+    <main class="container" style="max-width:560px;padding:40px 0;">
+      <h1 style="margin:0 0 12px;color:#101828;">Se connecter</h1>
+      <p style="margin:0 0 18px;color:#667085;">Accédez à votre journal personnel.</p>
+      <form method="post" class="feature-card" style="padding:20px;">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <label style="display:block;font-weight:700;color:#101828;">Nom d’utilisateur</label>
+            {{ form.username }}
+          </div>
+          <div>
+            <label style="display:block;font-weight:700;color:#101828;">Mot de passe</label>
+            {{ form.password }}
+          </div>
+          <button type="submit" class="btn-primary" style="width:100%;">Se connecter</button>
+        </div>
+      </form>
+      <p style="margin-top:12px;">Pas de compte ? <a href="{% url 'signup' %}">Créer un compte</a></p>
+    </main>
+  </body>
+  </html>
+

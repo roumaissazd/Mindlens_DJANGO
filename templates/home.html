@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    {% load static %}
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindLense – Journal personnel multimodal avec IA</title>
+    <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  </head>
+  <body>
+    <header class="navbar">
+      <div class="container nav-inner">
+        <a class="brand" href="/">
+         <img src="{% static 'images/Gemini_Generated_Image_9zqbuv9zqbuv9zqb-removebg-preview.png' %}" alt="MindLense" />
+        </a>
+        <nav class="nav-links">
+          <a href="/">Accueil</a>
+          <a href="#notes">Notes</a>
+          <a href="#voix">Voix</a>
+          <a href="#photos">Photos</a>
+          <a href="#resumes">Résumés</a>
+          {% if request.user.is_authenticated %}
+            <a href="#profil">Profil</a>
+          {% endif %}
+        </nav>
+        {% if request.user.is_authenticated %}
+          <a class="cta" href="{% url 'logout' %}">Se déconnecter</a>
+        {% else %}
+          <a class="cta" href="{% url 'login' %}">Se connecter</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-grid">
+          <div>
+            <h1>Éclairez vos émotions. Cultivez votre clarté.</h1>
+            <p>MindLense est une plateforme de journaling multimodale propulsée par l’IA. Écrivez, parlez, importez vos photos — nous vous aidons à comprendre vos émotions et à en tirer des insights utiles.</p>
+            <div class="hero-actions">
+              <a id="commencer" class="btn-primary" href="{% url 'signup' %}">Commencer</a>
+              <a class="btn-secondary" href="#demo">Voir la démo</a>
+            </div>
+          </div>
+          <div class="illustration">
+            <div class="illus-badge"><span class="illus-dot"></span><span class="illus-text">Humeur du jour : apaisée</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="features container">
+        <div class="section-head">
+          <span class="chip">Fonctionnalités clés</span>
+        </div>
+        <div class="features-grid">
+          <article id="notes" class="feature-card">
+            <div class="feature-icon i-notes">✍️</div>
+            <h3 class="feature-title">Notes</h3>
+            <p class="feature-desc">Consignez vos pensées librement. Suivi des émotions et tags automatiques.</p>
+          </article>
+          <article id="voix" class="feature-card">
+            <div class="feature-icon i-voice">🎤</div>
+            <h3 class="feature-title">Voix</h3>
+            <p class="feature-desc">Dictez vos ressentis. Transcription et analyse tonale assistées par IA.</p>
+          </article>
+          <article id="photos" class="feature-card">
+            <div class="feature-icon i-photos">📷</div>
+            <h3 class="feature-title">Photos</h3>
+            <p class="feature-desc">Importez des images pour illustrer vos souvenirs. Contextualisation intelligente.</p>
+          </article>
+          <article id="resumes" class="feature-card">
+            <div class="feature-icon i-summaries">🧠</div>
+            <h3 class="feature-title">Résumés</h3>
+            <p class="feature-desc">Obtenez des synthèses claires de vos journées et tendances émotionnelles.</p>
+          </article>
+          <article id="notifications" class="feature-card">
+            <div class="feature-icon i-notifs">🔔</div>
+            <h3 class="feature-title">Images & Notifications</h3>
+            <p class="feature-desc">Rappels bienveillants et visualisations minimalistes qui inspirent l’écriture.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container footer-inner">
+        <div>
+          © <span id="year"></span> MindLense. Tous droits réservés.
+        </div>
+        <nav class="footer-links">
+          <a href="#apropos">À propos</a>
+          <a href="#contact">Contact</a>
+          <a href="#faq">FAQ</a>
+          <a href="#social">Réseaux sociaux</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      document.getElementById('year').textContent = new Date().getFullYear();
+    </script>
+  </body>
+  </html>
+
+
