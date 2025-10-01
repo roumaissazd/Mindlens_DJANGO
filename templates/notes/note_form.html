@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% if action == 'create' %}Nouvelle Note{% else %}Modifier la Note{% endif %} – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="note-form-container">
+    <div class="container">
+      <!-- Breadcrumb -->
+      <nav class="breadcrumb">
+        <a href="{% url 'note_list' %}" class="breadcrumb-link"><i class="fas fa-arrow-left"></i> Retour aux notes</a>
+      </nav>
+
+      <!-- Form Card -->
+      <div class="form-card">
+        <div class="form-header">
+          <h1 class="form-title">
+            {% if action == 'create' %}
+              Nouvelle Note
+            {% else %}
+              Modifier la Note
+            {% endif %}
+          </h1>
+          <p class="form-subtitle">
+            {% if action == 'create' %}
+              Écrivez vos pensées, l'IA les analysera automatiquement
+            {% else %}
+              Modifiez votre note, l'analyse IA sera mise à jour
+            {% endif %}
+          </p>
+        </div>
+
+        <!-- Auto-save indicator -->
+        <div class="autosave-indicator" id="autosaveIndicator">
+          <span class="autosave-icon"></span>
+          <span class="autosave-text">Sauvegarde automatique activée</span>
+        </div>
+
+        <form method="post" class="note-form" id="noteForm">
+          {% csrf_token %}
+          
+          {% if form.errors %}
+            <div class="form-errors">
+              <h4>⚠️ Erreurs dans le formulaire :</h4>
+              {{ form.errors }}
+            </div>
+          {% endif %}
+
+          <!-- Title Field -->
+          <div class="form-group">
+            <label for="{{ form.title.id_for_label }}" class="form-label">
+              {{ form.title.label }}
+              <span class="form-optional">(optionnel)</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.help_text %}
+              <p class="form-help">{{ form.title.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Content Field -->
+          <div class="form-group">
+            <label for="{{ form.content.id_for_label }}" class="form-label">
+              {{ form.content.label }} <span class="form-required">*</span>
+            </label>
+            {{ form.content }}
+            <div class="form-meta">
+              <span class="char-count" id="charCount">0 caractères</span>
+              <span class="word-count" id="wordCount">0 mots</span>
+            </div>
+            {% if form.content.help_text %}
+              <p class="form-help">{{ form.content.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Mood and Category Row -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="{{ form.mood.id_for_label }}" class="form-label">
+                {{ form.mood.label }}
+                <span class="form-optional">(optionnel)</span>
+              </label>
+              {{ form.mood }}
+            </div>
+
+            <div class="form-group">
+              <label for="{{ form.category.id_for_label }}" class="form-label">
+                {{ form.category.label }}
+                <span class="form-optional">(l'IA peut le suggérer)</span>
+              </label>
+              {{ form.category }}
+            </div>
+          </div>
+
+          <!-- Manual Tags -->
+          <div class="form-group">
+            <label for="{{ form.manual_tags.id_for_label }}" class="form-label">
+              {{ form.manual_tags.label }}
+              <span class="form-optional">(optionnel)</span>
+            </label>
+            {{ form.manual_tags }}
+            {% if form.manual_tags.help_text %}
+              <p class="form-help">{{ form.manual_tags.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Favorite Checkbox -->
+          <div class="form-group form-checkbox-group">
+            <label class="checkbox-label">
+              {{ form.is_favorite }}
+              <span class="checkbox-text">{{ form.is_favorite.label }}</span>
+            </label>
+          </div>
+
+          <!-- AI Analysis Preview (only when editing) -->
+          {% if action == 'edit' and note %}
+            <div class="ai-preview-section">
+              <h3 class="ai-preview-title">Analyse IA actuelle</h3>
+              <div class="ai-preview-grid">
+                {% if note.sentiment_label %}
+                  <div class="ai-preview-item">
+                    <span class="ai-preview-label">Sentiment :</span>
+                    <span class="ai-preview-value">{{ note.get_sentiment_emoji }} {{ note.sentiment_label }}</span>
+                  </div>
+                {% endif %}
+                {% if note.category %}
+                  <div class="ai-preview-item">
+                    <span class="ai-preview-label">Catégorie :</span>
+                    <span class="ai-preview-value">{{ note.get_category_display }}</span>
+                  </div>
+                {% endif %}
+                {% if note.get_auto_tags_list %}
+                  <div class="ai-preview-item">
+                    <span class="ai-preview-label">Tags IA :</span>
+                    <span class="ai-preview-value">
+                      {% for tag in note.get_auto_tags_list|slice:":5" %}
+                        <span class="tag tag-auto">{{ tag }}</span>
+                      {% endfor %}
+                    </span>
+                  </div>
+                {% endif %}
+              </div>
+              <p class="ai-preview-note">L'analyse sera mise à jour si vous modifiez le contenu</p>
+            </div>
+          {% endif %}
+
+          <!-- Form Actions -->
+          <div class="form-actions">
+            <button type="submit" class="btn-primary btn-submit">
+              {% if action == 'create' %}
+                <i class="fas fa-plus"></i> Créer la note
+              {% else %}
+                <i class="fas fa-save"></i> Enregistrer les modifications
+              {% endif %}
+            </button>
+            <a href="{% if action == 'edit' %}{% url 'note_detail' note.pk %}{% else %}{% url 'note_list' %}{% endif %}"
+               class="btn-secondary">
+              <i class="fas fa-times"></i> Annuler
+            </a>
+          </div>
+
+          <!-- AI Info Box -->
+          <div class="ai-info-box">
+            <div class="ai-info-icon"><i class="fas fa-robot"></i></div>
+            <div class="ai-info-content">
+              <h4 class="ai-info-title"><i class="fas fa-sparkles"></i> Analyse IA automatique</h4>
+              <p class="ai-info-text">
+                Lorsque vous enregistrez votre note, notre IA analysera automatiquement :
+              </p>
+              <ul class="ai-info-list">
+                <li><strong>Sentiment</strong> : Analyse émotionnelle (très positif → très négatif)</li>
+                <li><strong>Humeur suggérée</strong> : Si vous ne choisissez pas d'humeur manuellement</li>
+                <li><strong>Catégorie suggérée</strong> : Si vous ne choisissez pas de catégorie manuellement</li>
+                <li><strong>Tags automatiques</strong> : Mots-clés extraits du contenu (5 maximum)</li>
+              </ul>
+              <p class="ai-info-note">
+                <strong>Astuce</strong> : Laissez les champs optionnels vides pour laisser l'IA les remplir automatiquement !<br>
+                L'analyse prend environ 5 secondes
+              </p>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script src="{% static 'js/notes.js' %}"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    
+    // Character and word counter
+    const contentField = document.querySelector('textarea[name="content"]');
+    const charCount = document.getElementById('charCount');
+    const wordCount = document.getElementById('wordCount');
+    
+    function updateCounts() {
+      const text = contentField.value;
+      const chars = text.length;
+      const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+      
+      charCount.textContent = `${chars} caractère${chars !== 1 ? 's' : ''}`;
+      wordCount.textContent = `${words} mot${words !== 1 ? 's' : ''}`;
+    }
+    
+    contentField.addEventListener('input', updateCounts);
+    updateCounts();
+  </script>
+</body>
+</html>
+

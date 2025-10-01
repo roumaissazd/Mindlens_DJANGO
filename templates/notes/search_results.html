@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recherche – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="search-container">
+    <div class="container">
+      <!-- Header -->
+      <div class="search-header">
+        <h1 class="search-title">🔍 Recherche</h1>
+        <a href="{% url 'note_list' %}" class="breadcrumb-link">← Retour aux notes</a>
+      </div>
+
+      <!-- Search Form -->
+      <div class="search-form-card">
+        <form method="get" class="advanced-search-form">
+          <div class="search-form-grid">
+            <!-- Text Search -->
+            <div class="form-group search-main">
+              <label for="{{ form.q.id_for_label }}" class="form-label">
+                {{ form.q.label }}
+              </label>
+              {{ form.q }}
+            </div>
+
+            <!-- Filters Row -->
+            <div class="search-filters-row">
+              <div class="form-group">
+                <label for="{{ form.category.id_for_label }}" class="form-label">
+                  {{ form.category.label }}
+                </label>
+                {{ form.category }}
+              </div>
+
+              <div class="form-group">
+                <label for="{{ form.mood.id_for_label }}" class="form-label">
+                  {{ form.mood.label }}
+                </label>
+                {{ form.mood }}
+              </div>
+
+              <div class="form-group">
+                <label for="{{ form.tags.id_for_label }}" class="form-label">
+                  {{ form.tags.label }}
+                </label>
+                {{ form.tags }}
+              </div>
+            </div>
+          </div>
+
+          <div class="search-actions">
+            <button type="submit" class="btn-primary">
+              🔍 Rechercher
+            </button>
+            <a href="{% url 'note_search' %}" class="btn-secondary">
+              Réinitialiser
+            </a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Results -->
+      {% if query or form.is_bound %}
+        <div class="search-results-section">
+          <div class="results-header">
+            <h2 class="results-title">
+              {% if results %}
+                {{ results|length }} résultat{{ results|length|pluralize }}
+                {% if query %}pour "{{ query }}"{% endif %}
+              {% else %}
+                Aucun résultat
+                {% if query %}pour "{{ query }}"{% endif %}
+              {% endif %}
+            </h2>
+          </div>
+
+          {% if results %}
+            <div class="notes-grid">
+              {% for note in results %}
+                <article class="note-card">
+                  <div class="note-card-header">
+                    <div class="note-meta">
+                      {% if note.category %}
+                        <span class="note-badge category-{{ note.category }}">
+                          {{ note.get_category_icon }} {{ note.get_category_display }}
+                        </span>
+                      {% endif %}
+                      {% if note.mood %}
+                        <span class="note-badge mood-{{ note.mood }}">
+                          {{ note.get_mood_emoji }}
+                        </span>
+                      {% endif %}
+                    </div>
+                    {% if note.is_favorite %}
+                      <span class="favorite-indicator">⭐</span>
+                    {% endif %}
+                  </div>
+                  
+                  <a href="{% url 'note_detail' note.pk %}" class="note-link">
+                    <h3 class="note-title">
+                      {% if note.title %}
+                        {{ note.title }}
+                      {% else %}
+                        Note du {{ note.created_at|date:"d/m/Y" }}
+                      {% endif %}
+                    </h3>
+                    <p class="note-excerpt">{{ note.content|truncatewords:30 }}</p>
+                  </a>
+                  
+                  <div class="note-footer">
+                    <div class="note-tags">
+                      {% for tag in note.tags.all|slice:":3" %}
+                        <span class="tag">{{ tag.name }}</span>
+                      {% endfor %}
+                      {% if note.get_auto_tags_list %}
+                        {% for tag in note.get_auto_tags_list|slice:":2" %}
+                          <span class="tag tag-auto">🤖 {{ tag }}</span>
+                        {% endfor %}
+                      {% endif %}
+                    </div>
+                    <div class="note-date">
+                      {{ note.created_at|date:"d/m/Y" }}
+                    </div>
+                  </div>
+                  
+                  {% if note.sentiment_label %}
+                    <div class="note-sentiment">
+                      <span class="sentiment-badge sentiment-{{ note.sentiment_label|slugify }}">
+                        {{ note.get_sentiment_emoji }} {{ note.sentiment_label }}
+                      </span>
+                    </div>
+                  {% endif %}
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <div class="empty-icon">🔍</div>
+              <h3 class="empty-title">Aucun résultat trouvé</h3>
+              <p class="empty-text">Essayez avec d'autres mots-clés ou filtres</p>
+            </div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="search-tips">
+          <h3 class="tips-title">💡 Conseils de recherche</h3>
+          <ul class="tips-list">
+            <li>Utilisez des mots-clés spécifiques pour des résultats plus précis</li>
+            <li>Combinez la recherche textuelle avec les filtres (catégorie, humeur, tags)</li>
+            <li>Les tags peuvent être séparés par des virgules pour rechercher plusieurs tags</li>
+            <li>La recherche est insensible à la casse et aux accents</li>
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
+

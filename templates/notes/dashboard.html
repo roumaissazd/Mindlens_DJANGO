@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="dashboard-container">
+    <div class="container">
+      <!-- Header -->
+      <div class="dashboard-header">
+        <div>
+          <h1 class="dashboard-title"><i class="fas fa-chart-line"></i> Dashboard</h1>
+          <p class="dashboard-subtitle">Vue d'ensemble de votre journal</p>
+        </div>
+        <div class="dashboard-actions">
+          <a href="{% url 'note_list' %}" class="btn-secondary"><i class="fas fa-arrow-left"></i> Retour aux notes</a>
+          <a href="{% url 'note_export_json' %}" class="btn-primary"><i class="fas fa-download"></i> Exporter (JSON)</a>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="dashboard-stats-grid">
+        <div class="stat-card stat-card-large">
+          <div class="stat-icon" style="background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));">
+            <i class="fas fa-book"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.total_notes }}</div>
+            <div class="stat-label">Notes totales</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: var(--color-accent);">
+            <i class="fas fa-star"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.favorites }}</div>
+            <div class="stat-label">Favoris</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: var(--color-secondary);">
+            <i class="fas fa-calendar-week"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.this_week }}</div>
+            <div class="stat-label">Cette semaine</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #8b5cf6;">
+            <i class="fas fa-calendar-alt"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.this_month }}</div>
+            <div class="stat-label">Ce mois-ci</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="charts-grid">
+        <!-- Activity Chart -->
+        <div class="chart-card chart-card-wide">
+          <h3 class="chart-title"><i class="fas fa-chart-area"></i> Activité des 30 derniers jours</h3>
+          <div class="chart-container">
+            <canvas id="activityChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Category Distribution -->
+        {% if category_stats %}
+          <div class="chart-card">
+            <h3 class="chart-title"><i class="fas fa-folder"></i> Répartition par catégorie</h3>
+            <div class="chart-container">
+              <canvas id="categoryChart"></canvas>
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Mood Distribution -->
+        {% if mood_stats %}
+          <div class="chart-card">
+            <h3 class="chart-title"><i class="fas fa-smile"></i> Répartition des humeurs</h3>
+            <div class="chart-container">
+              <canvas id="moodChart"></canvas>
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Sentiment Distribution -->
+        {% if sentiment_stats %}
+          <div class="chart-card">
+            <h3 class="chart-title"><i class="fas fa-brain"></i> Analyse des sentiments</h3>
+            <div class="chart-container">
+              <canvas id="sentimentChart"></canvas>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Recent Notes -->
+      {% if recent_notes %}
+        <div class="recent-notes-section">
+          <h3 class="section-title"><i class="fas fa-clock"></i> Notes récentes</h3>
+          <div class="recent-notes-list">
+            {% for note in recent_notes %}
+              <a href="{% url 'note_detail' note.pk %}" class="recent-note-item">
+                <div class="recent-note-header">
+                  <h4 class="recent-note-title">
+                    {% if note.title %}
+                      {{ note.title }}
+                    {% else %}
+                      Note du {{ note.created_at|date:"d/m/Y" }}
+                    {% endif %}
+                  </h4>
+                  <span class="recent-note-date">{{ note.created_at|date:"d/m/Y" }}</span>
+                </div>
+                <p class="recent-note-excerpt">{{ note.content|truncatewords:20 }}</p>
+                <div class="recent-note-meta">
+                  {% if note.category %}
+                    <span class="note-badge category-{{ note.category }}">
+                      {{ note.get_category_icon }} {{ note.get_category_display }}
+                    </span>
+                  {% endif %}
+                  {% if note.mood %}
+                    <span class="note-badge mood-{{ note.mood }}">
+                      {{ note.get_mood_emoji }}
+                    </span>
+                  {% endif %}
+                  {% if note.is_favorite %}
+                    <span class="note-badge favorite"><i class="fas fa-star"></i></span>
+                  {% endif %}
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Insights Section -->
+      <div class="insights-section">
+        <h3 class="section-title"><i class="fas fa-lightbulb"></i> Insights</h3>
+        <div class="insights-grid">
+          <div class="insight-card">
+            <div class="insight-icon"><i class="fas fa-fire"></i></div>
+            <div class="insight-content">
+              <h4 class="insight-title">Série active</h4>
+              <p class="insight-text">
+                Vous avez écrit {{ stats.this_week }} note{{ stats.this_week|pluralize }} cette semaine.
+                {% if stats.this_week > 0 %}
+                  Continuez comme ça !
+                {% else %}
+                  Prenez un moment pour écrire aujourd'hui.
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+          {% if category_stats %}
+            <div class="insight-card">
+              <div class="insight-icon"><i class="fas fa-folder-open"></i></div>
+              <div class="insight-content">
+                <h4 class="insight-title">Catégorie favorite</h4>
+                <p class="insight-text">
+                  Vous écrivez le plus sur :
+                  <strong>
+                    {% if category_stats.0.category == 'famille' %}Famille
+                    {% elif category_stats.0.category == 'travail' %}Travail
+                    {% elif category_stats.0.category == 'voyage' %}Voyage
+                    {% elif category_stats.0.category == 'sante' %}Santé
+                    {% elif category_stats.0.category == 'amour' %}Amour
+                    {% elif category_stats.0.category == 'loisirs' %}Loisirs
+                    {% elif category_stats.0.category == 'reflexion' %}Réflexion
+                    {% elif category_stats.0.category == 'autre' %}Autre
+                    {% else %}{{ category_stats.0.category|title }}
+                    {% endif %}
+                  </strong>
+                  ({{ category_stats.0.count }} note{{ category_stats.0.count|pluralize }})
+                </p>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if mood_stats %}
+            <div class="insight-card">
+              <div class="insight-icon">😊</div>
+              <div class="insight-content">
+                <h4 class="insight-title">Humeur dominante</h4>
+                <p class="insight-text">
+                  Votre humeur la plus fréquente :
+                  <strong>
+                    {% if mood_stats.0.mood == 'joyeux' %}😊 Joyeux
+                    {% elif mood_stats.0.mood == 'triste' %}😢 Triste
+                    {% elif mood_stats.0.mood == 'neutre' %}😐 Neutre
+                    {% elif mood_stats.0.mood == 'anxieux' %}😰 Anxieux
+                    {% elif mood_stats.0.mood == 'excite' %}🤩 Excité
+                    {% elif mood_stats.0.mood == 'calme' %}😌 Calme
+                    {% elif mood_stats.0.mood == 'colere' %}😠 En colère
+                    {% else %}{{ mood_stats.0.mood|title }}
+                    {% endif %}
+                  </strong>
+                  ({{ mood_stats.0.count }} note{{ mood_stats.0.count|pluralize }})
+                </p>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Activity Chart - Modern Area Chart with Gradient
+    const activityData = {{ activity_data|safe }};
+    const activityCtx = document.getElementById('activityChart');
+    if (activityCtx) {
+      // Create beautiful gradient (orange to purple like the screenshot)
+      const ctx = activityCtx.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, ctx.canvas.width, 0);
+      gradient.addColorStop(0, 'rgba(251, 146, 60, 0.8)');    // Orange
+      gradient.addColorStop(0.3, 'rgba(236, 72, 153, 0.7)');  // Pink
+      gradient.addColorStop(0.7, 'rgba(168, 85, 247, 0.7)');  // Purple
+      gradient.addColorStop(1, 'rgba(139, 92, 246, 0.8)');    // Deep purple
+
+      // Area fill gradient (vertical)
+      const areaGradient = ctx.createLinearGradient(0, 0, 0, 400);
+      areaGradient.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
+      areaGradient.addColorStop(0.5, 'rgba(168, 85, 247, 0.2)');
+      areaGradient.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+
+      new Chart(activityCtx, {
+        type: 'line',
+        data: {
+          labels: activityData.map(d => d.date),
+          datasets: [{
+            label: 'Notes créées',
+            data: activityData.map(d => d.count),
+            borderColor: gradient,
+            backgroundColor: areaGradient,
+            borderWidth: 3,
+            tension: 0.45,  // Smoother curves
+            fill: true,
+            pointRadius: 0,  // Hide points by default
+            pointHoverRadius: 8,
+            pointHoverBackgroundColor: '#a855f7',
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 3,
+            pointBackgroundColor: '#a855f7',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            intersect: false,
+            mode: 'index'
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              enabled: true,
+              backgroundColor: 'rgba(17, 24, 39, 0.95)',
+              padding: 16,
+              cornerRadius: 12,
+              titleFont: {
+                size: 14,
+                weight: '600',
+                family: "'Inter', sans-serif"
+              },
+              bodyFont: {
+                size: 16,
+                weight: 'bold',
+                family: "'Inter', sans-serif"
+              },
+              titleColor: '#9ca3af',
+              bodyColor: '#fff',
+              borderColor: 'rgba(168, 85, 247, 0.3)',
+              borderWidth: 1,
+              displayColors: false,
+              callbacks: {
+                title: function(context) {
+                  return context[0].label;
+                },
+                label: function(context) {
+                  const value = context.parsed.y;
+                  return value + ' note' + (value > 1 ? 's' : '');
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1,
+                font: {
+                  size: 11,
+                  family: "'Inter', sans-serif"
+                },
+                color: '#6b7280',
+                padding: 8
+              },
+              grid: {
+                color: 'rgba(107, 114, 128, 0.1)',
+                drawBorder: false,
+                lineWidth: 1
+              },
+              border: {
+                display: false
+              }
+            },
+            x: {
+              ticks: {
+                font: {
+                  size: 10,
+                  family: "'Inter', sans-serif"
+                },
+                color: '#6b7280',
+                maxRotation: 0,
+                minRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 10
+              },
+              grid: {
+                display: false,
+                drawBorder: false
+              },
+              border: {
+                display: false
+              }
+            }
+          },
+          animation: {
+            duration: 2000,
+            easing: 'easeInOutCubic'
+          }
+        }
+      });
+    }
+
+    // Category Chart
+    {% if category_stats %}
+    const categoryCtx = document.getElementById('categoryChart');
+    if (categoryCtx) {
+      const categoryData = [
+        {% for stat in category_stats %}
+          { label: '{{ stat.category }}', count: {{ stat.count }} }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+
+      new Chart(categoryCtx, {
+        type: 'doughnut',
+        data: {
+          labels: categoryData.map(d => d.label),
+          datasets: [{
+            data: categoryData.map(d => d.count),
+            backgroundColor: ['#4A90E2', '#50E3C2', '#F5A623', '#8b5cf6', '#ef4444', '#10b981', '#f59e0b']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+    {% endif %}
+
+    // Mood Chart
+    {% if mood_stats %}
+    const moodCtx = document.getElementById('moodChart');
+    if (moodCtx) {
+      const moodData = [
+        {% for stat in mood_stats %}
+          { label: '{{ stat.mood }}', count: {{ stat.count }} }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+
+      new Chart(moodCtx, {
+        type: 'bar',
+        data: {
+          labels: moodData.map(d => d.label),
+          datasets: [{
+            label: 'Nombre de notes',
+            data: moodData.map(d => d.count),
+            backgroundColor: '#50E3C2'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+    {% endif %}
+
+    // Sentiment Chart
+    {% if sentiment_stats %}
+    const sentimentCtx = document.getElementById('sentimentChart');
+    if (sentimentCtx) {
+      const sentimentData = [
+        {% for stat in sentiment_stats %}
+          { label: '{{ stat.sentiment_label }}', count: {{ stat.count }} }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ];
+
+      new Chart(sentimentCtx, {
+        type: 'pie',
+        data: {
+          labels: sentimentData.map(d => d.label),
+          datasets: [{
+            data: sentimentData.map(d => d.count),
+            backgroundColor: ['#10b981', '#50E3C2', '#F5A623', '#ef4444', '#b91c1c']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+    {% endif %}
+  </script>
+</body>
+</html>
+
