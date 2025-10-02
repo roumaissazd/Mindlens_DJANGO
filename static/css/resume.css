@@ -1,0 +1,267 @@
+/* Réinitialisation et styles globaux */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* MindLense theme */
+:root {
+  --color-primary: #4A90E2;
+  --color-secondary: #50E3C2;
+  --color-accent: #F5A623;
+  --color-bg: #F9FAFB;
+  --color-text: #333333;
+  --color-muted: #667085;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 10px 30px rgba(26, 86, 219, 0.12);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+/* Conteneur principal */
+.resume-generate-container {
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Titre principal */
+.main-title, h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.main-title::after, h1::after {
+  content: '';
+  width: 60px;
+  height: 4px;
+  background: var(--color-primary);
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+}
+
+/* Grille des cartes */
+.resume-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  padding: 20px 0;
+}
+
+/* Carte de résumé */
+.resume-card {
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border: 1px solid #e0e0e0;
+}
+
+.resume-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-md);
+}
+
+.resume-card a {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.resume-card h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text);
+}
+
+.resume-date {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-snippet {
+  font-size: 1rem;
+  color: var(--color-muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* Bouton secondaire */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background: #3a78c2; /* Nuance plus sombre de --color-primary */
+}
+
+/* Message pour aucun résumé */
+.no-resume-message {
+  text-align: center;
+  padding: 40px;
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin: 20px 0;
+}
+
+.no-resume-message p {
+  font-size: 1.2rem;
+  color: var(--color-muted);
+}
+
+/* Bouton principal */
+.action-button {
+  text-align: center;
+  margin-top: 32px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: none; /* Pour les boutons de formulaire */
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: #d68f1f; /* Nuance plus sombre de --color-accent */
+  transform: scale(1.05);
+}
+
+/* Styles pour le formulaire (Générer un résumé) */
+form {
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+  margin: 20px 0;
+}
+
+form p {
+  margin-bottom: 16px;
+}
+
+form label {
+  display: block;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+form input, form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  transition: border-color 0.3s ease;
+}
+
+form input:focus, form textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.2);
+}
+
+/* Résumé généré */
+.generated-resume {
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.generated-resume h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 16px;
+}
+
+.generated-resume p {
+  font-size: 1.1rem;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+/* Actions du résumé (Détail du résumé) */
+.resume-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main-title, h1 {
+    font-size: 2rem;
+  }
+
+  .resume-list-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-card, form, .generated-resume {
+    padding: 16px;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 10px 20px;
+    font-size: 1rem;
+  }
+
+  .resume-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+}

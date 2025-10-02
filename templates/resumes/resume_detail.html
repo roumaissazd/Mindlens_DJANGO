@@ -1,0 +1,32 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ resume.title|default:"Résumé" }} – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}">
+  <link rel="stylesheet" href="{% static 'css/resume.css' %}">
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="resume-generate-container">
+    <div class="container">
+      <h1>{{ resume.title|default:"Résumé" }}</h1>
+      <p class="resume-date">{{ resume.created_at|date:"d/m/Y H:i" }}</p>
+      
+      <div class="generated-resume">
+        {{ resume.content|linebreaks }}
+      </div>
+
+      <div class="resume-actions">
+        <a href="{% url 'resume_list' %}" class="btn-secondary">Retour à la liste</a>
+        <a href="{% url 'resume_generate' %}" class="btn-primary">Générer un nouveau résumé</a>
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+</body>
+</html>

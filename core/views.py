@@ -1,3 +1,4 @@
+from urllib import request
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as auth_login, logout as auth_logout
@@ -8,9 +9,9 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 
-from .forms import SignUpForm, NoteForm, SearchForm
-from .models import Note, Tag
-from .ai_utils import analyze_note
+from .forms import SignUpForm, NoteForm, SearchForm, ResumeGenerateForm
+from .models import Note, Tag, Resume
+from .ai_utils import analyze_note, generate_summary_from_notes  
 from .search_utils import index_note, remove_note_from_index, search_notes
 
 
@@ -398,3 +399,59 @@ def note_export_json(request):
     response['Content-Disposition'] = f'attachment; filename="mindlens_notes_{timezone.now().strftime("%Y%m%d")}.json"'
 
     return response
+
+
+
+@login_required
+def resume_generate(request):
+    form = ResumeGenerateForm(request.POST or None)
+    generated_resume = None
+
+    if request.method == "POST" and form.is_valid():
+        period = form.cleaned_data['period']
+        category = form.cleaned_data['category']
+
+        notes = Note.objects.filter(user=request.user)
+
+        # Filtrer par période
+        now = timezone.now()
+        if period == 'week':
+            notes = notes.filter(created_at__gte=now - timedelta(days=7))
+        elif period == 'month':
+            notes = notes.filter(created_at__gte=now - timedelta(days=30))
+
+        # Filtrer par catégorie
+        if category:
+            notes = notes.filter(category=category)
+
+        # Récupérer le contenu des notes
+        notes_contents = [note.content for note in notes]
+
+        if notes_contents:
+            summary_text = generate_summary_from_notes(notes_contents)
+
+            # Sauvegarder le résumé
+            generated_resume = Resume.objects.create(
+                author=request.user,
+                title=f"Résumé {period} {category or ''}".strip(),
+                content=summary_text,
+                notes_ids=[note.id for note in notes]
+            )
+
+    return render(request, "resumes/resume_generate.html", {
+        "form": form,
+        "generated_resume": generated_resume
+    })
+
+
+@login_required
+def resume_list(request):
+    """Afficher tous les résumés de l’utilisateur connecté."""
+    resumes = Resume.objects.filter(author=request.user).order_by('-created_at')
+    return render(request, 'resumes/resume_list.html', {'resumes': resumes})
+
+@login_required
+def resume_detail(request, pk):
+    """Afficher le détail d’un résumé."""
+    resume = get_object_or_404(Resume, pk=pk, author=request.user)
+    return render(request, 'resumes/resume_detail.html', {'resume': resume})

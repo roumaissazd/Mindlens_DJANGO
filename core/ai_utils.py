@@ -249,3 +249,47 @@ def analyze_note(text):
         'suggested_mood': suggested_mood
     }
 
+
+
+
+def get_summarizer():
+    """
+    Initialise le pipeline de résumé IA uniquement à la demande.
+    Cela évite le téléchargement du modèle au démarrage de Django.
+    """
+    return pipeline("summarization", model="facebook/bart-large-cnn")
+
+def generate_summary_from_notes(notes_contents, chunk_size=1000, max_summary_length=150):
+    """
+    Génère un résumé à partir d'une liste de textes (notes).
+    
+    notes_contents : list de str
+    chunk_size : nombre de caractères par chunk
+    max_summary_length : longueur max pour chaque chunk résumé
+    """
+    if not notes_contents:
+        return "Aucune note à résumer."
+
+    summarizer = get_summarizer()
+    full_text = " ".join(notes_contents)
+
+    # Découper le texte en chunks
+    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
+    
+    final_summary = ""
+    
+    for chunk in chunks:
+        try:
+            result = summarizer(
+                chunk, 
+                max_length=max_summary_length, 
+                min_length=50, 
+                do_sample=False
+            )
+            final_summary += result[0]['summary_text'] + " "
+        except Exception as e:
+            # En cas d'erreur sur un chunk, ignorer et continuer
+            final_summary += ""
+            print(f"Erreur IA chunk: {e}")
+
+    return final_summary.strip()

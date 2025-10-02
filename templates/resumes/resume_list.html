@@ -1,0 +1,47 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes Résumés – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}">
+    <link rel="stylesheet" href="{% static 'css/resume.css' %}">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="resume-generate-container">
+    <div class="container">
+      <h1 class="main-title">Mes Résumés</h1>
+
+      {% if resumes %}
+        <div class="resume-list-grid">
+          {% for resume in resumes %}
+            <div class="resume-card">
+              <a href="{% url 'resume_detail' resume.pk %}">
+                <h3>{{ resume.title|default:"Résumé sans titre" }}</h3>
+                <p class="resume-date"><i class="fas fa-calendar-alt"></i> {{ resume.created_at|date:"d/m/Y H:i" }}</p>
+                <p class="resume-snippet">{{ resume.content|truncatechars:180 }}</p>
+                <span class="btn-secondary"><i class="fas fa-eye"></i> Voir le résumé</span>
+              </a>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="no-resume-message">
+          <p>Aucun résumé disponible. Créez votre premier résumé dès maintenant !</p>
+        </div>
+      {% endif %}
+
+      <div class="action-button">
+        <a href="{% url 'resume_generate' %}" class="btn-primary"><i class="fas fa-plus-circle"></i> Générer un nouveau résumé</a>
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+</body>
+</html>

@@ -129,14 +129,16 @@ class Note(models.Model):
         return category_icons.get(self.category, '📝')
     
     
-class Summary(models.Model):
-    note = models.ForeignKey('Note', on_delete=models.CASCADE, related_name='summaries')  # Lien avec la note
-    content = models.TextField()  # Contenu du résumé généré
-    length = models.IntegerField(default=0)  # Longueur en mots (optionnel, pour stats)
-    generated_by_ai = models.BooleanField(default=True)  # True si généré par IA
+
+class Resume(models.Model):
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # Propriétaire (pour sécurité)
+
+    # Optionnel : stocker les notes résumées
+    notes_ids = models.JSONField(default=list, blank=True)
 
     def __str__(self):
-        return f"Résumé de {self.note.title or 'Note sans titre'}"
+        return self.title if self.title else f"Résumé {self.id}"

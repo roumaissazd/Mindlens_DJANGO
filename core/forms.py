@@ -1,7 +1,8 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Note, Tag
+from .models import Note, Tag, Resume
+
 
 
 class SignUpForm(UserCreationForm):
@@ -132,3 +133,17 @@ class SearchForm(forms.Form):
     )
 
 
+
+class ResumeGenerateForm(forms.Form):
+    PERIOD_CHOICES = [
+        ('week', 'Cette semaine'),
+        ('month', 'Ce mois'),
+        ('all', 'Toutes les notes')
+    ]
+
+    period = forms.ChoiceField(choices=PERIOD_CHOICES, required=True, label="Période")
+    category = forms.ChoiceField(
+        choices=[('', 'Toutes les catégories')] + Note.CATEGORY_CHOICES,
+        required=False,
+        label="Catégorie"
+    )

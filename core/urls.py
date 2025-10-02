@@ -24,6 +24,13 @@ urlpatterns = [
 
     # Export
     path('notes/export/json/', views.note_export_json, name='note_export_json'),
+
+
+
+  # Resume
+    path('resumes/', views.resume_list, name='resume_list'),
+    path('resumes/<int:pk>/', views.resume_detail, name='resume_detail'),
+    path('resumes/generate/', views.resume_generate, name='resume_generate'),
 ]
 
 
