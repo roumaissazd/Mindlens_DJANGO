@@ -24,6 +24,7 @@ urlpatterns = [
 
     # Export
     path('notes/export/json/', views.note_export_json, name='note_export_json'),
+    path('image-notifications/', include('image_notifications.urls')),
 ]
 
 

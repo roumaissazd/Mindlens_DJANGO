@@ -40,6 +40,8 @@ INSTALLED_APPS = [
 	# Local apps
 	'core',
 	'voice_journal',
+	'image_notifications',
+	'django_crontab',
 ]
 
 MIDDLEWARE = [
@@ -142,3 +144,8 @@ WHOOSH_INDEX_DIR = BASE_DIR / 'whoosh_index'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# Cron jobs
+CRONJOBS = [
+    ('0 9 * * *', 'image_notifications.cron.daily_reminder_task'),  # 9 AM daily
+    ('*/5 * * * *', 'image_notifications.cron.check_image_generation_task'),  # Every 5 mins for testing
+]
