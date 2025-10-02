@@ -127,3 +127,16 @@ class Note(models.Model):
             'autre': '📝',
         }
         return category_icons.get(self.category, '📝')
+    
+    
+class Summary(models.Model):
+    note = models.ForeignKey('Note', on_delete=models.CASCADE, related_name='summaries')  # Lien avec la note
+    content = models.TextField()  # Contenu du résumé généré
+    length = models.IntegerField(default=0)  # Longueur en mots (optionnel, pour stats)
+    generated_by_ai = models.BooleanField(default=True)  # True si généré par IA
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)  # Propriétaire (pour sécurité)
+
+    def __str__(self):
+        return f"Résumé de {self.note.title or 'Note sans titre'}"
