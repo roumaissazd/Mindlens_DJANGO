@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Journal - MindLense</title>
     <link rel="stylesheet" href="{% static 'css/home.css' %}" />
-    <style>
+	<style>
         /* Voice Journal specific styles */
         .voice-hero {
             padding: 40px 0;
@@ -180,7 +180,7 @@
             margin: 0 auto 16px;
             color: #fff;
         }
-    </style>
+	</style>
 </head>
 <body>
     {% include 'partials/nav.html' %}
@@ -206,10 +206,14 @@
             
             <div id="results" class="results">
                 <div class="result-section">
+                    <h3>💬 Message de l'IA</h3>
+                    <div id="aiMessage" class="result-content"></div>
+                </div>
+                <div class="result-section">
                     <h3>📝 Transcription</h3>
                     <div id="transcription" class="result-content"></div>
-                </div>
-                
+		</div>
+
                 <div class="result-section">
                     <h3>😊 Sentiment du texte</h3>
                     <div id="textSentiment" class="result-content"></div>
@@ -219,13 +223,18 @@
                     <h3>🎵 Émotion audio</h3>
                     <div id="audioEmotion" class="result-content"></div>
                 </div>
-            </div>
+
+                <div class="result-section">
+                    <h3>🎶 Recommandations musicales</h3>
+                    <div id="musicList" class="result-content" style="display:grid;gap:12px"></div>
+		</div>
+	</div>
         </section>
     </main>
 
     {% include 'partials/footer.html' %}
 
-    <script>
+	<script>
         class VoiceJournal {
             constructor() {
                 this.mediaRecorder = null;
@@ -252,7 +261,7 @@
             async startRecording() {
                 try {
                     console.log('[VoiceJournal] Requesting microphone permission...');
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     console.log('[VoiceJournal] Microphone stream obtained');
                     
                     this.mediaRecorder = new MediaRecorder(stream);
@@ -363,6 +372,61 @@
                         ${result.audio_emotion} (${result.audio_emotion_score.toFixed(2)})
                     </span>
                 `;
+
+                // AI message
+                const aiMsgEl = document.getElementById('aiMessage');
+                aiMsgEl.textContent = result.ai_message || '';
+
+                // Dynamic theme (apply to hero background)
+                if (result.theme && result.theme.primary && result.theme.secondary) {
+                    const hero = document.querySelector('.voice-hero');
+                    hero.style.background = `linear-gradient(180deg, ${result.theme.primary}, ${result.theme.secondary})`;
+                }
+
+                // Music cards
+                const musicList = document.getElementById('musicList');
+                musicList.innerHTML = '';
+                (result.music || []).forEach(item => {
+                    const card = document.createElement('div');
+                    card.style.display = 'grid';
+                    card.style.gridTemplateColumns = '160px 1fr';
+                    card.style.gap = '12px';
+                    card.style.alignItems = 'center';
+                    card.style.padding = '10px';
+                    card.style.border = '1px solid #e5e7eb';
+                    card.style.borderRadius = '12px';
+
+                    if (item.embedUrl) {
+                        const iframe = document.createElement('iframe');
+                        iframe.width = '160';
+                        iframe.height = '90';
+                        iframe.src = item.embedUrl;
+                        iframe.title = item.title || 'YouTube player';
+                        iframe.frameBorder = '0';
+                        iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+                        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+                        iframe.allowFullscreen = true;
+                        card.appendChild(iframe);
+                    } else {
+                        const ph = document.createElement('div');
+                        ph.style.width = '160px';
+                        ph.style.height = '90px';
+                        ph.style.borderRadius = '8px';
+                        ph.style.background = '#f3f4f6';
+                        ph.style.display = 'grid';
+                        ph.style.placeItems = 'center';
+                        ph.textContent = 'Preview indisponible';
+                        card.appendChild(ph);
+                    }
+
+                    const meta = document.createElement('div');
+                    meta.style.fontWeight = '700';
+                    meta.style.fontSize = '14px';
+                    meta.textContent = item.title || 'Recommended music';
+                    card.appendChild(meta);
+
+                    musicList.appendChild(card);
+                });
                 
                 this.results.style.display = 'block';
                 
@@ -385,7 +449,7 @@
         // Initialize the voice journal when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             new VoiceJournal();
-        });
-    </script>
+		});
+	</script>
 </body>
 </html>

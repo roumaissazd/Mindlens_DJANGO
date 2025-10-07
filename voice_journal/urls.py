@@ -8,4 +8,6 @@ urlpatterns = [
 	path('<int:pk>/delete/', views.voice_journal_delete, name='voice_journal_delete'),
 	path('<int:pk>/toggle-favorite/', views.voice_journal_toggle_favorite, name='voice_journal_toggle_favorite'),
 	path('process-audio/', views.process_audio, name='process_audio'),
+	path('api/analyze-voice/', views.api_analyze_voice, name='api_analyze_voice'),
 ]
+
