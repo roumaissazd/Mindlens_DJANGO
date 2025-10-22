@@ -180,6 +180,28 @@
             margin: 0 auto 16px;
             color: #fff;
         }
+        
+        /* Animations pour la respiration */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+        
+        @keyframes breatheIn {
+            0% { transform: scale(0.8); }
+            100% { transform: scale(1.2); }
+        }
+        
+        @keyframes breatheOut {
+            0% { transform: scale(1.2); }
+            100% { transform: scale(0.8); }
+        }
+        
+        @keyframes hold {
+            0% { transform: scale(1.1); }
+            100% { transform: scale(1.1); }
+        }
 	</style>
 </head>
 <body>
@@ -219,6 +241,23 @@
                     </div>
                     <div id="agentReply" class="result-content" style="margin-top:10px"></div>
                     <div id="agentPreview" style="margin-top:10px"></div>
+                    
+                    <!-- Animation de respiration -->
+                    <div id="breathingAnimation" style="display:none; margin-bottom:15px; text-align:center; background:#f8fafc; padding:20px; border-radius:12px; border:2px solid #e2e8f0;">
+                        <div id="breathingStep" style="font-size:14px; color:#64748b; margin-bottom:8px; font-weight:500;">
+                            <span id="stepText">Étape 1/3</span>
+                        </div>
+                        <div id="breathingTimer" style="font-size:32px; font-weight:bold; color:#4A90E2; margin-bottom:12px;">
+                            <span id="timerText">Prêt</span>
+                        </div>
+                        <div id="breathingProgress" style="width:100%; height:12px; background:#e2e8f0; border-radius:6px; overflow:hidden; margin-bottom:12px;">
+                            <div id="progressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #4A90E2, #50E3C2); transition:width 0.1s linear;"></div>
+                        </div>
+                        <div id="breathingInstruction" style="font-size:18px; color:#334155; margin-bottom:12px; font-weight:600;">
+                            <span id="instructionText">En attente...</span>
+                        </div>
+                        <div id="breathingVisual" style="width:80px; height:80px; margin:0 auto; border-radius:50%; background:#4A90E2; opacity:0.8; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(74, 144, 226, 0.3);"></div>
+                    </div>
                 </div>
                 <div class="result-section">
                     <h3>📝 Transcription</h3>
@@ -759,7 +798,139 @@
                     window.speechSynthesis.cancel();
                     utter.onend = () => { if (typeof onend === 'function') onend(); };
                     window.speechSynthesis.speak(utter);
+                    
+                    // Détecter les instructions de respiration et démarrer l'animation
+                    if (text && typeof text === 'string') {
+                        const breathingText = text.toLowerCase();
+                        if (breathingText.includes('respir') || breathingText.includes('commence') || breathingText.includes('exercice')) {
+                            // Démarrer l'animation dès que l'assistant commence l'exercice
+                            setTimeout(() => {
+                                startBreathingAnimation(text);
+                            }, 1000); // Attendre 1 seconde que l'assistant commence à parler
+                        }
+                    }
                 } catch {}
+            }
+            
+            // Animation de respiration avec gestion des étapes
+            let breathingSteps = [];
+            let currentStep = 0;
+            let breathingInterval = null;
+            
+            function startBreathingAnimation(instruction) {
+                const animationEl = document.getElementById('breathingAnimation');
+                const stepEl = document.getElementById('stepText');
+                const timerEl = document.getElementById('timerText');
+                const progressEl = document.getElementById('progressBar');
+                const instructionEl = document.getElementById('instructionText');
+                const visualEl = document.getElementById('breathingVisual');
+                
+                animationEl.style.display = 'block';
+                
+                // Définir toutes les étapes de respiration
+                breathingSteps = [
+                    { text: 'Inspirez pendant 4 secondes', duration: 4, style: 'inspire', step: 1 },
+                    { text: 'Bloquez pendant 4 secondes', duration: 4, style: 'hold', step: 2 },
+                    { text: 'Expirez pendant 6 secondes', duration: 6, style: 'expire', step: 3 }
+                ];
+                
+                currentStep = 0;
+                runBreathingStep();
+            }
+            
+            function runBreathingStep() {
+                if (currentStep >= breathingSteps.length) {
+                    // Fin de l'exercice
+                    const animationEl = document.getElementById('breathingAnimation');
+                    const timerEl = document.getElementById('timerText');
+                    const progressEl = document.getElementById('progressBar');
+                    const instructionEl = document.getElementById('instructionText');
+                    const visualEl = document.getElementById('breathingVisual');
+                    const stepEl = document.getElementById('stepText');
+                    
+                    timerEl.textContent = '✓ Terminé';
+                    progressEl.style.width = '100%';
+                    instructionEl.textContent = 'Exercice terminé !';
+                    stepEl.textContent = 'Exercice complet';
+                    visualEl.style.background = '#10B981';
+                    visualEl.style.transform = 'scale(1.2)';
+                    
+                    // Masquer l'animation après 3 secondes
+                    setTimeout(() => {
+                        animationEl.style.display = 'none';
+                    }, 3000);
+                    return;
+                }
+                
+                const step = breathingSteps[currentStep];
+                const timerEl = document.getElementById('timerText');
+                const progressEl = document.getElementById('progressBar');
+                const instructionEl = document.getElementById('instructionText');
+                const visualEl = document.getElementById('breathingVisual');
+                const stepEl = document.getElementById('stepText');
+                
+                // Mettre à jour l'interface
+                stepEl.textContent = `Étape ${step.step}/3`;
+                instructionEl.textContent = step.text;
+                timerEl.textContent = step.duration;
+                progressEl.style.width = '0%';
+                
+                // Animation visuelle selon le type
+                updateVisualStyle(visualEl, step.style);
+                
+                let timeLeft = step.duration;
+                
+                breathingInterval = setInterval(() => {
+                    timeLeft--;
+                    timerEl.textContent = timeLeft;
+                    
+                    // Mettre à jour la barre de progression
+                    const progress = ((step.duration - timeLeft) / step.duration) * 100;
+                    progressEl.style.width = progress + '%';
+                    
+                    // Animation du cercle
+                    const scale = 0.8 + (progress / 100) * 0.4;
+                    visualEl.style.transform = `scale(${scale})`;
+                    
+                    if (timeLeft <= 0) {
+                        clearInterval(breathingInterval);
+                        timerEl.textContent = '✓';
+                        progressEl.style.width = '100%';
+                        visualEl.style.transform = 'scale(1)';
+                        
+                        // Passer à l'étape suivante après 1 seconde
+                        setTimeout(() => {
+                            currentStep++;
+                            runBreathingStep();
+                        }, 1000);
+                    }
+                }, 1000);
+            }
+            
+            function extractDuration(text) {
+                const match = text.match(/(\d+)\s*secondes?/);
+                return match ? parseInt(match[1]) : null;
+            }
+            
+            function updateVisualStyle(element, style) {
+                element.className = '';
+                switch(style) {
+                    case 'inspire':
+                        element.style.background = 'linear-gradient(45deg, #4A90E2, #50E3C2)';
+                        element.style.animation = 'pulse 1s infinite';
+                        break;
+                    case 'hold':
+                        element.style.background = '#F5A623';
+                        element.style.animation = 'none';
+                        break;
+                    case 'expire':
+                        element.style.background = 'linear-gradient(45deg, #50E3C2, #4A90E2)';
+                        element.style.animation = 'pulse 1.5s infinite';
+                        break;
+                    default:
+                        element.style.background = '#4A90E2';
+                        element.style.animation = 'none';
+                }
             }
 
             function endCallCleanup() {
@@ -768,6 +939,8 @@
                 try { if (agentRecorder && agentRecorder.state !== 'inactive') agentRecorder.stop(); } catch {}
                 try { if (agentStream) agentStream.getTracks().forEach(t => t.stop()); } catch {}
                 try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
+                try { if (breathingInterval) { clearInterval(breathingInterval); breathingInterval = null; } } catch {}
+                try { document.getElementById('breathingAnimation').style.display = 'none'; } catch {}
                 talkBtn.disabled = false;
                 stopBtn.disabled = true;
                 statusEl.textContent = '';
