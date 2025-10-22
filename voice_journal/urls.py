@@ -9,5 +9,6 @@ urlpatterns = [
 	path('<int:pk>/toggle-favorite/', views.voice_journal_toggle_favorite, name='voice_journal_toggle_favorite'),
 	path('process-audio/', views.process_audio, name='process_audio'),
 	path('api/analyze-voice/', views.api_analyze_voice, name='api_analyze_voice'),
+	path('api/voice-agent-turn/', views.api_voice_agent_turn, name='api_voice_agent_turn'),
 ]
 

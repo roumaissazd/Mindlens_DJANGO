@@ -182,6 +182,147 @@
         .pagination a:hover {
             background: #f9fafb;
         }
+        
+        /* Styles pour les filtres */
+        .filters-section {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .filters-form {
+            margin-bottom: 16px;
+        }
+        
+        .filters-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            align-items: end;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .filter-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        
+        .search-input, .filter-select, .date-input {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+        
+        .search-input:focus, .filter-select:focus, .date-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            cursor: pointer;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            margin: 0;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .btn-filter {
+            background: var(--color-primary);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .btn-filter:hover {
+            background: #1d4ed8;
+        }
+        
+        .btn-clear {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background-color 0.2s ease;
+        }
+        
+        .btn-clear:hover {
+            background: #e5e7eb;
+        }
+        
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 12px 0;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .filters-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b7280;
+        }
+        
+        .filter-tag {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        /* Responsive design pour les filtres */
+        @media (max-width: 768px) {
+            .filters-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            
+            .filter-actions {
+                justify-content: stretch;
+            }
+            
+            .btn-filter, .btn-clear {
+                flex: 1;
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
@@ -197,6 +338,96 @@
         </section>
 
         <section class="container">
+            <!-- Filtres et recherche -->
+            <div class="filters-section">
+                <form method="GET" class="filters-form">
+                    <div class="filters-row">
+                        <!-- Recherche textuelle -->
+                        <div class="filter-group">
+                            <label for="search">🔍 Recherche</label>
+                            <input type="text" id="search" name="search" value="{{ search_query }}" 
+                                   placeholder="Rechercher dans les transcriptions..." class="search-input">
+                        </div>
+                        
+                        <!-- Filtre par sentiment -->
+                        <div class="filter-group">
+                            <label for="sentiment">😊 Sentiment</label>
+                            <select id="sentiment" name="sentiment" class="filter-select">
+                                <option value="">Tous les sentiments</option>
+                                {% for sentiment in unique_sentiments %}
+                                    <option value="{{ sentiment.value }}" {% if sentiment_filter == sentiment.value %}selected{% endif %}>
+                                        {{ sentiment.label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Filtre par émotion -->
+                        <div class="filter-group">
+                            <label for="emotion">🎭 Émotion</label>
+                            <select id="emotion" name="emotion" class="filter-select">
+                                <option value="">Toutes les émotions</option>
+                                {% for emotion in unique_emotions %}
+                                    <option value="{{ emotion.value }}" {% if emotion_filter == emotion.value %}selected{% endif %}>
+                                        {{ emotion.label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Filtre par date -->
+                        <div class="filter-group">
+                            <label for="date_from">📅 Du</label>
+                            <input type="date" id="date_from" name="date_from" value="{{ date_from }}" class="date-input">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="date_to">📅 Au</label>
+                            <input type="date" id="date_to" name="date_to" value="{{ date_to }}" class="date-input">
+                        </div>
+                        
+                        <!-- Filtre favoris -->
+                        <div class="filter-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="favorites" value="1" {% if favorites_only %}checked{% endif %}>
+                                ⭐ Favoris seulement
+                            </label>
+                        </div>
+                        
+                        <!-- Boutons d'action -->
+                        <div class="filter-actions">
+                            <button type="submit" class="btn-filter">🔍 Filtrer</button>
+                            <a href="{% url 'voice_journal_list' %}" class="btn-clear">🗑️ Effacer</a>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Résumé des filtres actifs -->
+                {% if search_query or sentiment_filter or emotion_filter or date_from or date_to or favorites_only %}
+                <div class="active-filters">
+                    <span class="filters-label">Filtres actifs :</span>
+                    {% if search_query %}
+                        <span class="filter-tag">Recherche: "{{ search_query }}"</span>
+                    {% endif %}
+                    {% if sentiment_filter %}
+                        <span class="filter-tag">Sentiment: {{ active_sentiment_label }}</span>
+                    {% endif %}
+                    {% if emotion_filter %}
+                        <span class="filter-tag">Émotion: {{ active_emotion_label }}</span>
+                    {% endif %}
+                    {% if date_from %}
+                        <span class="filter-tag">Du: {{ date_from }}</span>
+                    {% endif %}
+                    {% if date_to %}
+                        <span class="filter-tag">Au: {{ date_to }}</span>
+                    {% endif %}
+                    {% if favorites_only %}
+                        <span class="filter-tag">⭐ Favoris</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            
             {% if voice_entries %}
                 <div class="voice-entries-grid">
                     {% for entry in voice_entries %}
@@ -235,8 +466,8 @@
                 {% if page_obj.has_other_pages %}
                 <div class="pagination">
                     {% if page_obj.has_previous %}
-                        <a href="?page=1">&laquo; Première</a>
-                        <a href="?page={{ page_obj.previous_page_number }}">Précédente</a>
+                        <a href="?{% if search_query %}search={{ search_query }}&{% endif %}{% if sentiment_filter %}sentiment={{ sentiment_filter }}&{% endif %}{% if emotion_filter %}emotion={{ emotion_filter }}&{% endif %}{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}{% if favorites_only %}favorites=1&{% endif %}page=1">&laquo; Première</a>
+                        <a href="?{% if search_query %}search={{ search_query }}&{% endif %}{% if sentiment_filter %}sentiment={{ sentiment_filter }}&{% endif %}{% if emotion_filter %}emotion={{ emotion_filter }}&{% endif %}{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}{% if favorites_only %}favorites=1&{% endif %}page={{ page_obj.previous_page_number }}">Précédente</a>
                     {% endif %}
                     
                     <span class="current">
@@ -244,16 +475,22 @@
                     </span>
                     
                     {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}">Suivante</a>
-                        <a href="?page={{ page_obj.paginator.num_pages }}">Dernière &raquo;</a>
+                        <a href="?{% if search_query %}search={{ search_query }}&{% endif %}{% if sentiment_filter %}sentiment={{ sentiment_filter }}&{% endif %}{% if emotion_filter %}emotion={{ emotion_filter }}&{% endif %}{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}{% if favorites_only %}favorites=1&{% endif %}page={{ page_obj.next_page_number }}">Suivante</a>
+                        <a href="?{% if search_query %}search={{ search_query }}&{% endif %}{% if sentiment_filter %}sentiment={{ sentiment_filter }}&{% endif %}{% if emotion_filter %}emotion={{ emotion_filter }}&{% endif %}{% if date_from %}date_from={{ date_from }}&{% endif %}{% if date_to %}date_to={{ date_to }}&{% endif %}{% if favorites_only %}favorites=1&{% endif %}page={{ page_obj.paginator.num_pages }}">Dernière &raquo;</a>
                     {% endif %}
                 </div>
                 {% endif %}
             {% else %}
                 <div class="empty-state">
-                    <h3>Aucun enregistrement vocal</h3>
-                    <p>Vous n'avez pas encore d'enregistrements vocaux.</p>
-                    <a href="{% url 'voice_journal' %}" class="btn-primary">Créer mon premier enregistrement</a>
+                    {% if search_query or sentiment_filter or emotion_filter or date_from or date_to or favorites_only %}
+                        <h3>Aucun résultat trouvé</h3>
+                        <p>Aucun enregistrement vocal ne correspond à vos critères de recherche.</p>
+                        <a href="{% url 'voice_journal_list' %}" class="btn-primary">Effacer les filtres</a>
+                    {% else %}
+                        <h3>Aucun enregistrement vocal</h3>
+                        <p>Vous n'avez pas encore d'enregistrements vocaux.</p>
+                        <a href="{% url 'voice_journal' %}" class="btn-primary">Créer mon premier enregistrement</a>
+                    {% endif %}
                 </div>
             {% endif %}
         </section>

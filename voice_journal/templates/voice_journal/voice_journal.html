@@ -209,6 +209,17 @@
                     <h3>💬 Message de l'IA</h3>
                     <div id="aiMessage" class="result-content"></div>
                 </div>
+                <div id="supportCard" class="result-section" style="display:none">
+                    <h3>🫶 Soutien</h3>
+                    <div id="supportText" class="result-content" style="margin-bottom:12px">Tu sembles un peu tendu(e). Veux-tu en parler?</div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <button id="talkToAiBtn" class="record-button">🫶 Commencer le soutien</button>
+                        <button id="stopAiBtn" class="record-button stop-button" disabled>⏹️ Terminer l'appel</button>
+                        <span id="agentStatus" style="font-weight:600;color:#475467"></span>
+                    </div>
+                    <div id="agentReply" class="result-content" style="margin-top:10px"></div>
+                    <div id="agentPreview" style="margin-top:10px"></div>
+                </div>
                 <div class="result-section">
                     <h3>📝 Transcription</h3>
                     <div id="transcription" class="result-content"></div>
@@ -338,6 +349,9 @@
                         console.warn('[VoiceJournal] Failed to parse JSON response', e);
                     }
                     console.log('[VoiceJournal] Server response:', result);
+                    if (result && typeof result.transcription === 'string') {
+                        console.log('[VoiceJournal] Transcription (main):', result.transcription);
+                    }
                     
                     if (result.success) {
                         this.displayResults(result);
@@ -376,6 +390,21 @@
                 // AI message
                 const aiMsgEl = document.getElementById('aiMessage');
                 aiMsgEl.textContent = result.ai_message || '';
+
+                // Suggestion card for sad/stressed
+                const supportCard = document.getElementById('supportCard');
+                const supportText = document.getElementById('supportText');
+                const mood = (result.emotion || '').toLowerCase();
+                if (mood === 'sad' || mood === 'stressed') {
+                    supportText.textContent = mood === 'sad'
+                        ? "Tu sembles un peu triste. Veux-tu en parler à voix haute? Clique sur 'Commencer le soutien' pour démarrer une conversation avec l'assistant."
+                        : "Tu sembles stressé(e). Souhaites-tu une courte discussion guidée? Clique sur 'Commencer le soutien' pour démarrer une conversation avec l'assistant.";
+                    supportCard.style.display = 'block';
+                    supportCard.dataset.mood = mood;
+                    // Ne pas démarrer automatiquement - attendre que l'utilisateur clique sur le bouton
+                } else {
+                    supportCard.style.display = 'none';
+                }
 
                 // Dynamic theme (apply to hero background)
                 if (result.theme && result.theme.primary && result.theme.secondary) {
@@ -449,7 +478,309 @@
         // Initialize the voice journal when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             new VoiceJournal();
+            setupVoiceAgent();
 		});
+
+        // --- Voice Agent JS ---
+        function setupVoiceAgent() {
+            const talkBtn = document.getElementById('talkToAiBtn');
+            const stopBtn = document.getElementById('stopAiBtn');
+            const statusEl = document.getElementById('agentStatus');
+            const replyEl = document.getElementById('agentReply');
+            const supportCard = document.getElementById('supportCard');
+            let agentRecorder = null;
+            let agentChunks = [];
+            let agentStream = null;
+            let audioCtx = null;
+            let analyser = null;
+            let rafId = null;
+            let inCall = false;
+            let listeningActive = false;
+
+            window.voiceAgentAutoStart = async function() {
+                if (inCall) return;
+                await startConversation();
+            }
+
+            async function startConversation() {
+                inCall = true;
+                replyEl.textContent = '';
+                statusEl.textContent = 'Connexion…';
+                talkBtn.disabled = true;
+                stopBtn.disabled = false;
+                try {
+                    const fd = new FormData();
+                    const mood = supportCard?.dataset?.mood || '';
+                    if (mood) fd.append('mood', mood);
+                    fd.append('start', '1');
+                    const res = await fetch('/voice-journal/api/voice-agent-turn/', {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                    });
+                    const data = await res.json();
+                    if (data && typeof data.user_text === 'string') {
+                        console.log('[VoiceAgent] Transcription (turn):', data.user_text);
+                    }
+                    if (!data.success) throw new Error(data.error || 'start failed');
+                    replyEl.textContent = data.reply_text || '';
+                    statusEl.textContent = 'Assistant parle…';
+                    speakText(replyEl.textContent, (data.mood || ''), () => beginListening());
+                } catch (e) {
+                    statusEl.textContent = 'Erreur démarrage';
+                    inCall = false;
+                    talkBtn.disabled = false;
+                    stopBtn.disabled = true;
+                }
+            }
+
+            async function beginListening() {
+                if (!inCall) return;
+                if (listeningActive) return;
+                statusEl.textContent = 'Écoute… (parlez, prenez votre temps)';
+                agentChunks = [];
+                listeningActive = true;
+                try {
+                    agentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioCtx.createMediaStreamSource(agentStream);
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 2048;
+                    source.connect(analyser);
+                    const dataArray = new Uint8Array(analyser.fftSize);
+                    let mime = 'audio/webm;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mime)) mime = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mime)) mime = '';
+                    agentRecorder = new MediaRecorder(agentStream, mime ? { mimeType: mime } : undefined);
+                    agentRecorder.ondataavailable = (e) => { if (e && e.data && e.data.size) agentChunks.push(e.data); };
+                    // Use a timeslice so dataavailable fires periodically even for short utterances
+                    agentRecorder.start(300);
+
+                    let silentMs = 0;
+                    const threshold = 8; // Seuil plus sensible pour détecter le silence
+                    const minSpeechMs = 800; // Plus de temps minimum avant de pouvoir détecter le silence
+                    let totalMs = 0;
+                    const intervalMs = 100;
+                    const tick = async () => {
+                        if (!inCall) return;
+                        analyser.getByteTimeDomainData(dataArray);
+                        let sum = 0;
+                        for (let i = 0; i < dataArray.length; i++) {
+                            const v = dataArray[i] - 128;
+                            sum += Math.abs(v);
+                        }
+                        const avg = sum / dataArray.length;
+                        totalMs += intervalMs;
+                        if (avg < threshold && totalMs > minSpeechMs) {
+                            silentMs += intervalMs;
+                        } else {
+                            silentMs = 0;
+                        }
+                        
+                        // Détecter si on attend une réponse musicale simple (oui/non)
+                        const currentReply = replyEl.textContent.toLowerCase();
+                        const isMusicResponse = currentReply.includes('aimes') || 
+                                               currentReply.includes('extrait') || 
+                                               currentReply.includes('musique') ||
+                                               currentReply.includes('oui/non') ||
+                                               currentReply.includes('ou pas');
+                        
+                        // Réduire le délai de silence pour les réponses musicales
+                        const silenceThreshold = isMusicResponse ? 1000 : 2500; // 1s pour musique, 2.5s pour le reste
+                        
+                        if (silentMs >= silenceThreshold) {
+                            // Délai supplémentaire pour s'assurer que l'utilisateur a terminé
+                            statusEl.textContent = 'Traitement… (attendez)';
+                            
+                            const delay = isMusicResponse ? 100 : 500; // Délai très réduit pour les réponses musicales
+                            setTimeout(async () => {
+                                await finalizeTurn();
+                            }, delay);
+                            return;
+                        }
+                        rafId = setTimeout(tick, intervalMs);
+                    };
+                    rafId = setTimeout(tick, intervalMs);
+                } catch (e) {
+                    statusEl.textContent = 'Erreur micro';
+                    endCallCleanup();
+                }
+            }
+
+            async function finalizeTurn() {
+                try { if (rafId) { clearTimeout(rafId); rafId = null; } } catch {}
+                // Stop the recorder and WAIT for its onstop to flush last chunk
+                try {
+                    if (agentRecorder && agentRecorder.state !== 'inactive') {
+                        const stopped = new Promise(resolve => {
+                            const prevOnStop = agentRecorder.onstop;
+                            agentRecorder.onstop = (...args) => { try { prevOnStop && prevOnStop(...args); } catch {} resolve(); };
+                        });
+                        agentRecorder.stop();
+                        await stopped;
+                    }
+                } catch {}
+                try { if (agentStream) agentStream.getTracks().forEach(t => t.stop()); } catch {}
+                try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
+                listeningActive = false;
+                statusEl.textContent = 'Analyse…';
+
+                try {
+                    const size = agentChunks.reduce((s, b) => s + (b?.size || 0), 0);
+                    console.log('[VoiceAgent] Turn size (bytes):', size);
+                    if (!size) {
+                        // Pendant les exercices de respiration, ne pas considérer le silence comme une erreur
+                        const supportCard = document.getElementById('supportCard');
+                        const currentReply = replyEl.textContent.toLowerCase();
+                        const isBreathingExercise = currentReply.includes('respir') || 
+                                                   currentReply.includes('inspire') || 
+                                                   currentReply.includes('bloque') || 
+                                                   currentReply.includes('expire');
+                        
+                        if (isBreathingExercise) {
+                            statusEl.textContent = "Continuez l'exercice...";
+                            // Envoyer une requête vide pour continuer l'exercice
+                            const fd = new FormData();
+                            fd.append('audio', new Blob(), 'empty.webm');
+                            const mood = supportCard?.dataset?.mood || '';
+                            if (mood) fd.append('mood', mood);
+                            
+                            try {
+                                const res = await fetch('/voice-journal/api/voice-agent-turn/', {
+                                    method: 'POST',
+                                    body: fd,
+                                    headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                    replyEl.textContent = data.reply_text || '';
+                                    statusEl.textContent = 'Assistant parle…';
+                                    speakText(replyEl.textContent, (data.mood || ''), () => {
+                                        if (data.end_call) {
+                                            stopCall();
+                                        } else {
+                                            beginListening();
+                                        }
+                                    });
+                                    return;
+                                }
+                            } catch (e) {
+                                console.log('Erreur lors de la continuation de l\'exercice:', e);
+                            }
+                        }
+                        
+                        statusEl.textContent = "Je n'ai rien capté. Réessayons.";
+                        if (inCall) setTimeout(() => beginListening(), 400);
+                        return;
+                    }
+                    const blob = new Blob(agentChunks, { type: 'audio/webm' });
+                    const fd = new FormData();
+                    fd.append('audio', blob, 'agent_turn.webm');
+                    const mood = supportCard?.dataset?.mood || '';
+                    if (mood) fd.append('mood', mood);
+                    const res = await fetch('/voice-journal/api/voice-agent-turn/', {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'turn failed');
+                    if (typeof data.intent === 'string') {
+                        console.log('[VoiceAgent] Detected intent:', data.intent);
+                    }
+                    replyEl.textContent = data.reply_text || '';
+                    // Render optional music preview and manage flow
+                    const pv = document.getElementById('agentPreview');
+                    const hadPreview = !!pv.dataset.currentEmbed;
+                    if (data.preview && data.preview.embedUrl) {
+                        // Keep preview visible and reusable; only replace if new
+                        if (pv.dataset.currentEmbed !== data.preview.embedUrl) {
+                            pv.innerHTML = '';
+                            const iframe = document.createElement('iframe');
+                            iframe.width = '280';
+                            iframe.height = '158';
+                            iframe.src = data.preview.embedUrl;
+                            iframe.frameBorder = '0';
+                            iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+                            iframe.allowFullscreen = true;
+                            pv.appendChild(iframe);
+                            // Add a small clickable link below
+                            const link = document.createElement('a');
+                            link.href = data.preview.embedUrl.replace('youtube-nocookie.com/embed/', 'youtube.com/watch?v=');
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            link.textContent = 'Ouvrir sur YouTube';
+                            link.style.display = 'block';
+                            link.style.marginTop = '6px';
+                            pv.appendChild(link);
+                            pv.dataset.currentEmbed = data.preview.embedUrl;
+                        }
+                        // During preview, wait for video to finish, then ask for feedback
+                        statusEl.textContent = "Extrait en cours…";
+                        if (data.end_call) {
+                            stopCall();
+                        } else {
+                            // Attendre que l'extrait se termine, puis demander l'avis rapidement
+                            setTimeout(() => { 
+                                if (inCall) {
+                                    statusEl.textContent = 'Assistant parle…';
+                                    speakText("Tu aimes ou pas ?", '', () => {
+                                        if (inCall) beginListening();
+                                    });
+                                }
+                            }, 8000); // 8 secondes pour l'extrait, puis question immédiate
+                        }
+                    } else {
+                        // No preview; proceed with TTS + normal loop
+                        // Do not clear pv here so the user can still click the previous video
+                        statusEl.textContent = 'Assistant parle…';
+                        speakText(replyEl.textContent, (data.mood || ''), () => {
+                            if (data.end_call) {
+                                stopCall();
+                            } else {
+                                beginListening();
+                            }
+                        });
+                    }
+                } catch (e) {
+                    statusEl.textContent = 'Erreur agent';
+                    // keep call but allow retry listening
+                    if (inCall) setTimeout(() => beginListening(), 600);
+                }
+            }
+
+            function speakText(text, mood, onend) {
+                try {
+                    const utter = new SpeechSynthesisUtterance(text);
+                    utter.lang = 'fr-FR';
+                    utter.rate = 1.0;
+                    if (mood === 'sad') utter.rate = 0.95;
+                    if (mood === 'stressed') utter.rate = 0.98;
+                    window.speechSynthesis.cancel();
+                    utter.onend = () => { if (typeof onend === 'function') onend(); };
+                    window.speechSynthesis.speak(utter);
+                } catch {}
+            }
+
+            function endCallCleanup() {
+                try { window.speechSynthesis.cancel(); } catch {}
+                try { if (rafId) { clearTimeout(rafId); rafId = null; } } catch {}
+                try { if (agentRecorder && agentRecorder.state !== 'inactive') agentRecorder.stop(); } catch {}
+                try { if (agentStream) agentStream.getTracks().forEach(t => t.stop()); } catch {}
+                try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
+                talkBtn.disabled = false;
+                stopBtn.disabled = true;
+                statusEl.textContent = '';
+            }
+
+            async function stopCall() {
+                inCall = false;
+                endCallCleanup();
+            }
+
+            if (talkBtn) talkBtn.addEventListener('click', startConversation);
+            if (stopBtn) stopBtn.addEventListener('click', stopCall);
+        }
 	</script>
 </body>
 </html>
