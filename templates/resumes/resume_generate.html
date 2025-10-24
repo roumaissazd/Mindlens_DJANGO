@@ -18,7 +18,7 @@
       <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit" class="btn-primary">Générer le résumé</button>
+        <button type="submit" class="btn-primary">Générer le résumé.</button>
       </form>
 
       {% if generated_resume %}
