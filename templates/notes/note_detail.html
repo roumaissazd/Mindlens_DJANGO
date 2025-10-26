@@ -47,10 +47,15 @@
           </div>
           
           <div class="note-actions">
-            <button class="btn-favorite-detail {% if note.is_favorite %}active{% endif %}" 
+            <button class="btn-favorite-detail {% if note.is_favorite %}active{% endif %}"
                     data-note-id="{{ note.id }}"
                     title="{% if note.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}">
               ⭐
+            </button>
+            <button class="btn-completed {% if note.is_completed %}active{% endif %}"
+                    data-note-id="{{ note.id }}"
+                    title="{% if note.is_completed %}Marquer comme non terminé{% else %}Marquer comme terminé{% endif %}">
+              {% if note.is_completed %}✅{% else %}⏳{% endif %}
             </button>
             <a href="{% url 'note_edit' note.pk %}" class="btn-action btn-edit" title="Modifier">
               ✏️ Modifier
@@ -95,7 +100,7 @@
                   {% if note.sentiment_score %}
                     <div class="sentiment-score">
                       <div class="score-bar">
-                        <div class="score-fill" style="width: {{ note.sentiment_score|floatformat:0 }}%"></div>
+                        <div class="score-fill" data-score="{{ note.sentiment_score|default:0|floatformat:0 }}"></div>
                       </div>
                       <span class="score-text">{{ note.sentiment_score|floatformat:0 }}% de confiance</span>
                     </div>

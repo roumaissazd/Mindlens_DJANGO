@@ -24,6 +24,49 @@
       {% endif %}
     </nav>
     {% if request.user.is_authenticated %}
+      <!-- Notifications -->
+      <div class="notifications-dropdown">
+        <button class="notification-btn" id="notification-toggle">
+          <i class="fas fa-bell"></i>
+          {% if unread_notifications_count > 0 %}
+            <span class="notification-badge">{{ unread_notifications_count }}</span>
+          {% endif %}
+        </button>
+        <div class="notifications-menu" id="notifications-menu">
+          <div class="notifications-header">
+            <h4>Notifications</h4>
+            {% if unread_notifications_count > 0 %}
+              <span class="unread-count">{{ unread_notifications_count }} non lues</span>
+            {% endif %}
+          </div>
+          <div class="notifications-list">
+            {% for notification in notifications %}
+              <a href="{% url 'mark_notification_read_and_redirect' notification.id %}" class="notification-item-link">
+                <div class="notification-item {% if not notification.is_read %}unread{% endif %}" data-notification-id="{{ notification.id }}">
+                  <div class="notification-content">
+                    <p>{{ notification.message }}</p>
+                    <small>{{ notification.timestamp|date:"d/m H:i" }}</small>
+                  </div>
+                  {% if not notification.is_read %}
+                    <div class="unread-indicator"></div>
+                  {% endif %}
+                </div>
+              </a>
+            {% empty %}
+              <div class="no-notifications">
+                <p>Aucune notification</p>
+              </div>
+            {% endfor %}
+          </div>
+          {% if notifications %}
+            <div class="notifications-footer">
+              <a href="#" class="mark-all-read">Tout marquer comme lu</a>
+              <a href="{% url 'notification_list' %}" class="view-all-notifications">Voir tout</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
       <a class="cta" href="{% url 'logout' %}">Se déconnecter</a>
     {% else %}
       <a class="cta" href="{% url 'login' %}">Se connecter</a>

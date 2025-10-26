@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 	# Local apps
 	'core',
 	'voice_journal',
+	'django_crontab',
 ]
 
 MIDDLEWARE = [
@@ -65,6 +66,7 @@ TEMPLATES = [
 				'django.template.context_processors.request',
 				'django.contrib.auth.context_processors.auth',
 				'django.contrib.messages.context_processors.messages',
+				'core.context_processors.notifications',
 			],
 		},
 	},
@@ -142,3 +144,12 @@ WHOOSH_INDEX_DIR = BASE_DIR / 'whoosh_index'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Configuration de django-crontab
+CRONJOBS = [
+    # NOUVEAU RAPPEL POUR NOTES INCOMPLÈTES - tous les jours à 11h00
+    ('0 11 * * *', 'django.core.management.call_command', ['generate_note_completion_reminders'], {'verbosity': '1'}),
+
+    # NUDGE DE SOUTIEN SI INACTIVITÉ - tous les jours à 10h00
+    ('0 10 * * *', 'django.core.management.call_command', ['generate_support_nudges'], {'verbosity': '1'}),
+]

@@ -1,0 +1,52 @@
+<!-- templates/notifications/notification_list.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Mes Notifications</h1>
+    <hr>
+
+    {% if notifications %}
+        <div class="notification-list">
+            {% for notif in notifications %}
+                <div class="notification-item {% if notif.is_read %}is-read{% else %}is-unread{% endif %}">
+                    <p>
+                        <strong>{{ notif.message }}</strong>
+                    </p>
+                    <small class="text-muted">
+                        Reçue le : {{ notif.timestamp|date:"d F Y à H:i" }}
+                    </small>
+                    <div class="notification-actions">
+                        {% if not notif.is_read %}
+                            <a href="{% url 'mark_notification_read_and_redirect' notif.id %}" class="button is-small is-primary">Marquer comme lu</a>
+                        {% else %}
+                            <span class="tag is-success">Lue</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>Vous n'avez aucune notification.</p>
+    {% endif %}
+</div>
+
+<style>
+    .notification-list { margin-top: 20px; }
+    .notification-item {
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+    .notification-item.is-unread {
+        border-left: 5px solid #3273dc; /* Bleu pour les non lues */
+        background-color: #f0f8ff; /* Fond légèrement bleu */
+    }
+    .notification-item.is-read {
+        opacity: 0.7;
+    }
+    .notification-actions { margin-top: 10px; }
+</style>
+{% endblock %}

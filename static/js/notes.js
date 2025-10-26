@@ -7,14 +7,14 @@
 document.addEventListener('DOMContentLoaded', function() {
   // Handle favorite buttons
   const favoriteButtons = document.querySelectorAll('.btn-favorite, .btn-favorite-detail');
-  
+
   favoriteButtons.forEach(button => {
     button.addEventListener('click', async function(e) {
       e.preventDefault();
       e.stopPropagation();
-      
+
       const noteId = this.dataset.noteId;
-      
+
       try {
         const response = await fetch(`/notes/${noteId}/toggle-favorite/`, {
           method: 'POST',
@@ -23,20 +23,20 @@ document.addEventListener('DOMContentLoaded', function() {
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (response.ok) {
           const data = await response.json();
-          
+
           // Toggle active class
           this.classList.toggle('active');
-          
+
           // Update title
           if (data.is_favorite) {
             this.title = 'Retirer des favoris';
           } else {
             this.title = 'Ajouter aux favoris';
           }
-          
+
           // Show feedback
           showNotification(
             data.is_favorite ? '⭐ Ajouté aux favoris' : 'Retiré des favoris',
@@ -45,6 +45,53 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       } catch (error) {
         console.error('Error toggling favorite:', error);
+        showNotification('❌ Erreur lors de la mise à jour', 'error');
+      }
+    });
+  });
+
+  // Handle completed buttons
+  const completedButtons = document.querySelectorAll('.btn-completed');
+
+  completedButtons.forEach(button => {
+    button.addEventListener('click', async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const noteId = this.dataset.noteId;
+
+      try {
+        const response = await fetch(`/notes/${noteId}/toggle-completed/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Toggle active class
+          this.classList.toggle('active');
+
+          // Update icon and title
+          if (data.is_completed) {
+            this.innerHTML = '✅';
+            this.title = 'Marquer comme non terminé';
+          } else {
+            this.innerHTML = '⏳';
+            this.title = 'Marquer comme terminé';
+          }
+
+          // Show feedback
+          showNotification(
+            data.is_completed ? '✅ Note marquée comme terminée' : '⏳ Note marquée comme en cours',
+            'success'
+          );
+        }
+      } catch (error) {
+        console.error('Error toggling completed:', error);
         showNotification('❌ Erreur lors de la mise à jour', 'error');
       }
     });
@@ -303,6 +350,73 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
       }
     }
   });
+});
+
+// ============ NOTIFICATIONS DROPDOWN ============
+document.addEventListener('DOMContentLoaded', function() {
+  const notificationToggle = document.getElementById('notification-toggle');
+  const notificationsMenu = document.getElementById('notifications-menu');
+  const markAllReadLink = document.querySelector('.mark-all-read');
+
+  if (notificationToggle && notificationsMenu) {
+    // Toggle dropdown
+    notificationToggle.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      notificationsMenu.classList.toggle('show');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!notificationToggle.contains(e.target) && !notificationsMenu.contains(e.target)) {
+        notificationsMenu.classList.remove('show');
+      }
+    });
+
+    // Mark all as read
+    if (markAllReadLink) {
+      markAllReadLink.addEventListener('click', async function(e) {
+        e.preventDefault();
+
+        try {
+          const response = await fetch('/api/notifications/mark-all-read/', {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': getCookie('csrftoken'),
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            // Hide notification badge
+            const badge = document.querySelector('.notification-badge');
+            if (badge) badge.style.display = 'none';
+
+            // Mark all items as read visually
+            document.querySelectorAll('.notification-item.unread').forEach(item => {
+              item.classList.remove('unread');
+              // Remove mark as read button
+              const markBtn = item.querySelector('.mark-read-btn');
+              if (markBtn) markBtn.remove();
+            });
+
+            // Update unread count
+            const unreadCount = document.querySelector('.unread-count');
+            if (unreadCount) unreadCount.textContent = '0 non lues';
+
+            showNotification('✅ Toutes les notifications marquées comme lues', 'success');
+          }
+        } catch (error) {
+          console.error('Error marking notifications as read:', error);
+          showNotification('❌ Erreur lors de la mise à jour', 'error');
+        }
+      });
+    }
+
+    // Handle clicking on notification items (they are now links)
+    // The click will navigate to the mark as read URL, so no additional JS needed
+    // The page will redirect and mark as read automatically
+  }
 });
 
 console.log('✨ MindLense Notes Module loaded successfully');

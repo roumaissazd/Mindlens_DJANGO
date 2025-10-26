@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 import json
 
-
 class Tag(models.Model):
     """Tag model for categorizing notes."""
     name = models.CharField(max_length=50, unique=True)
@@ -64,6 +63,7 @@ class Note(models.Model):
 
     # Features
     is_favorite = models.BooleanField(default=False)
+    is_completed = models.BooleanField(default=False, help_text="Whether this note represents a completed task/action")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -127,3 +127,16 @@ class Note(models.Model):
             'autre': '📝',
         }
         return category_icons.get(self.category, '📝')
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f'Notification for {self.user.username}: {self.message[:20]}'
+
+    class Meta:
+        ordering = ['-timestamp']

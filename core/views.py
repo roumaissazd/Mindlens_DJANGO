@@ -9,7 +9,7 @@ from datetime import timedelta
 import json
 
 from .forms import SignUpForm, NoteForm, SearchForm
-from .models import Note, Tag
+from .models import Note, Tag, Notification
 from .ai_utils import analyze_note
 from .search_utils import index_note, remove_note_from_index, search_notes
 
@@ -398,3 +398,92 @@ def note_export_json(request):
     response['Content-Disposition'] = f'attachment; filename="mindlens_notes_{timezone.now().strftime("%Y%m%d")}.json"'
 
     return response
+
+
+# ============ NOTIFICATION VIEWS ============
+
+@login_required
+def mark_notification_read(request, notification_id):
+    """Mark a single notification as read (AJAX)."""
+    if request.method == 'POST':
+        try:
+            notification = Notification.objects.get(
+                id=notification_id,
+                user=request.user,
+                is_read=False
+            )
+            notification.is_read = True
+            notification.save()
+
+            return JsonResponse({'success': True})
+        except Notification.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Notification not found'}, status=404)
+
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+
+@login_required
+def note_toggle_completed(request, pk):
+    """Toggle completed status of a note (AJAX)."""
+    if request.method == 'POST':
+        note = get_object_or_404(Note, pk=pk, user=request.user)
+        note.is_completed = not note.is_completed
+        note.save()
+
+        return JsonResponse({
+            'success': True,
+            'is_completed': note.is_completed
+        })
+
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=400)
+
+
+@login_required
+def toggle_note_completion(request, pk):
+    """Toggle completion status and redirect back to note detail."""
+    note = get_object_or_404(Note, pk=pk, user=request.user)
+    note.is_completed = not note.is_completed
+    note.save()
+
+    status = "marquée comme terminée" if note.is_completed else "marquée comme non terminée"
+    messages.success(request, f"Note '{note.title or 'Sans titre'}' {status}.")
+    return redirect('note_detail', pk=pk)
+
+
+@login_required
+def mark_all_notifications_read(request):
+    """Mark all user notifications as read (AJAX)."""
+    if request.method == 'POST':
+        Notification.objects.filter(
+            user=request.user,
+            is_read=False
+        ).update(is_read=True)
+
+        return JsonResponse({'success': True})
+
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+
+@login_required
+def notification_list(request):
+    """Display list of user's notifications."""
+    notifications = Notification.objects.filter(user=request.user).order_by('-timestamp')
+
+    # Mark all as read when viewing the list
+    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+
+    context = {
+        'notifications': notifications,
+    }
+
+    return render(request, 'notifications/notification_list.html', context)
+
+
+@login_required
+def mark_notification_read_and_redirect(request, notification_id):
+    """Marque une notification comme lue et redirige vers la liste des notifications."""
+    notification = get_object_or_404(Notification, id=notification_id, user=request.user)
+    notification.is_read = True
+    notification.save()
+    messages.success(request, "Notification marquée comme lue.")
+    return redirect('notification_list')

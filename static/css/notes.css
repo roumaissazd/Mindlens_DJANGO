@@ -371,6 +371,31 @@
   animation: star-bounce 0.5s;
 }
 
+.btn-completed {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: var(--transition-smooth);
+  padding: 4px;
+}
+
+.btn-completed:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.btn-completed.active {
+  opacity: 1;
+  animation: check-bounce 0.5s;
+}
+
+@keyframes check-bounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
 @keyframes star-bounce {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.3); }

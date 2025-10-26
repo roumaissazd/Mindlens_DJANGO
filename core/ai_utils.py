@@ -49,28 +49,24 @@ def get_zero_shot_pipeline():
 
 def analyze_sentiment(text):
     """
-    Analyze sentiment of text.
-    
-    Args:
-        text (str): Text to analyze
-        
-    Returns:
-        dict: {'label': str, 'score': float} or None if error
+    Analyze sentiment of text with an improved prompt.
     """
     if not text or len(text.strip()) < 10:
         return None
-    
+
     try:
         pipeline = get_sentiment_pipeline()
         if pipeline is None:
             return None
-        
-        # Truncate text if too long (max 512 tokens)
-        text_truncated = text[:2000]
-        
-        result = pipeline(text_truncated)[0]
-        
-        # Convert star rating to sentiment label
+
+        # --- MODIFICATION CLÉ ICI ---
+        # On formate le texte en une question pour guider le modèle
+        prompt = f"Le sentiment de ce texte est : '{text[:2000]}'"
+        # ---------------------------
+
+        result = pipeline(prompt)[0]
+
+        # La conversion reste la même
         star_to_sentiment = {
             '1 star': 'très négatif',
             '2 stars': 'négatif',
@@ -78,9 +74,9 @@ def analyze_sentiment(text):
             '4 stars': 'positif',
             '5 stars': 'très positif',
         }
-        
+
         sentiment_label = star_to_sentiment.get(result['label'], 'neutre')
-        
+
         return {
             'label': sentiment_label,
             'score': result['score']
