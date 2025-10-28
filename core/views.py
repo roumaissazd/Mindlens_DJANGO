@@ -11,8 +11,9 @@ import json
 
 from .forms import SignUpForm, NoteForm, SearchForm, ResumeGenerateForm
 from .models import Note, Tag, Resume
-from .ai_utils import analyze_note, generate_summary_from_notes  
+from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64
 from .search_utils import index_note, remove_note_from_index, search_notes
+from django.contrib import messages
 
 
 def home(request):
@@ -400,9 +401,8 @@ def note_export_json(request):
 
     return response
 
+ #Resume
 
-
-@login_required
 @login_required
 def resume_generate(request):
     form = ResumeGenerateForm(request.POST or None)
@@ -456,15 +456,52 @@ def resume_list(request):
     resumes = Resume.objects.filter(author=request.user).order_by('-created_at')
     return render(request, 'resumes/resume_list.html', {'resumes': resumes})
 
+
+
 @login_required
 def resume_detail(request, pk):
-    """Afficher le détail d'un résumé avec TTS support."""
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
-    
+
+    # Generate audio on-the-fly if missing (or re-generate on edit)
+    if not resume.audio_b64:
+        resume.audio_b64 = text_to_speech_base64(resume.content)
+        resume.save(update_fields=['audio_b64'])
+
     context = {
         'resume': resume,
-        # NEW: Pass notes_ids as JSON for potential future use
-        'notes_ids_json': resume.notes_ids  # Already a list, will be serialized by Django
+        'audio_b64': resume.audio_b64,
     }
-    
     return render(request, 'resumes/resume_detail.html', context)
+
+@login_required
+def resume_edit(request, pk):
+    resume = get_object_or_404(Resume, pk=pk, author=request.user)
+
+    if request.method == "POST":
+        new_content = request.POST.get("content", "").strip()
+        if not new_content:
+            messages.error(request, "Le résumé ne peut pas être vide.")
+        else:
+            resume.content = new_content
+            # Re-generate TTS audio (your function already detects language)
+            resume.audio_b64 = text_to_speech_base64(new_content)
+            resume.save()
+            messages.success(request, "Résumé mis à jour avec succès !")
+        return redirect('resume_detail', pk=resume.pk)
+
+    # GET → show edit form
+    context = {
+        "resume": resume,
+    }
+    return render(request, "resumes/resume_edit.html", context)
+
+@login_required
+def resume_delete(request, pk):
+    resume = get_object_or_404(Resume, pk=pk, author=request.user)
+
+    if request.method == "POST":
+        resume.delete()
+        messages.success(request, "Résumé supprimé avec succès.")
+        return redirect('resume_list')   # plain name, no namespace
+
+    return redirect('resume_list')  # GET → just go back

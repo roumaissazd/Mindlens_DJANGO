@@ -6,9 +6,173 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mes Résumés – MindLense</title>
   <link rel="stylesheet" href="{% static 'css/home.css' %}">
-    <link rel="stylesheet" href="{% static 'css/resume.css' %}">
-
+  <link rel="stylesheet" href="{% static 'css/resume.css' %}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --color-primary: #4A90E2;
+      --color-secondary: #50E3C2;
+      --color-accent: #F5A623;
+      --color-bg: #F9FAFB;
+      --color-text: #333333;
+      --color-muted: #667085;
+    }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .main-title {
+      color: var(--color-primary);
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+
+    .resume-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      transition: all 0.25s ease;
+      border: 1px solid #eef0f4;
+    }
+
+    .resume-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(74, 144, 226, 0.1);
+      border-color: var(--color-primary);
+    }
+
+    .resume-link {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .resume-link h3 {
+      margin: 0 0 0.5rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--color-text);
+      transition: color 0.2s;
+    }
+
+    .resume-link:hover h3 {
+      color: var(--color-primary);
+    }
+
+    .resume-date {
+      font-size: 0.85rem;
+      color: var(--color-muted);
+      margin: 0.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .resume-snippet {
+      font-size: 0.9rem;
+      color: #555;
+      line-height: 1.5;
+      margin: 0.75rem 0;
+    }
+
+    .resume-actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.95rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: 8px;
+      text-decoration: none;
+      color: white;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      cursor: pointer;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+
+    .btn-view { background: #6c757d; }
+    .btn-view:hover { background: #5a6268; }
+    .btn-edit { background: var(--color-secondary); }
+    .btn-edit:hover { background: #3dc9a7; }
+    .btn-delete { background: #e74c3c; }
+    .btn-delete:hover { background: #c0392b; }
+
+    .action-btn i { font-size: 0.95rem; }
+
+    .no-resume-message {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--color-muted);
+      font-size: 1.1rem;
+    }
+
+    .action-button {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+      transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+      background: #3a7bc8;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(74, 144, 226, 0.3);
+    }
+
+    /* --- Modal CSS --- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+      animation: fadeIn 0.3s ease;
+    }
+    .modal h3 { color: #ef4444; margin-bottom: 1rem; }
+    .modal-actions { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
+    .btn-confirm { background:#ef4444; color:white; padding:0.6rem 1rem; border:none; border-radius:8px; cursor:pointer; }
+    .btn-cancel { background:#6c757d; color:white; padding:0.6rem 1rem; border:none; border-radius:8px; cursor:pointer; }
+    @keyframes fadeIn { from {opacity:0; transform:scale(0.9);} to {opacity:1; transform:scale(1);} }
+  </style>
 </head>
 <body>
   {% include 'partials/nav.html' %}
@@ -21,12 +185,27 @@
         <div class="resume-list-grid">
           {% for resume in resumes %}
             <div class="resume-card">
-              <a href="{% url 'resume_detail' resume.pk %}">
+              <a href="{% url 'resume_detail' resume.pk %}" class="resume-link">
                 <h3>{{ resume.title|default:"Résumé sans titre" }}</h3>
-                <p class="resume-date"><i class="fas fa-calendar-alt"></i> {{ resume.created_at|date:"d/m/Y H:i" }}</p>
+                <p class="resume-date">
+                  <i class="far fa-calendar-alt"></i> {{ resume.created_at|date:"d/m/Y à H:i" }}
+                </p>
                 <p class="resume-snippet">{{ resume.content|truncatechars:180 }}</p>
-                <span class="btn-secondary"><i class="fas fa-eye"></i> Voir le résumé</span>
               </a>
+
+              <div class="resume-actions">
+                <a href="{% url 'resume_detail' resume.pk %}">
+                  <span class="action-btn btn-view"><i class="far fa-eye"></i> Voir</span>
+                </a>
+                <a href="{% url 'resume_edit' resume.pk %}">
+                  <span class="action-btn btn-edit"><i class="far fa-edit"></i> Éditer</span>
+                </a>
+                <button type="button" class="action-btn btn-delete"
+                        data-resume-id="{{ resume.pk }}"
+                        data-resume-title="{{ resume.title }}">
+                  <i class="far fa-trash-alt"></i> Supprimer
+                </button>
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -37,11 +216,49 @@
       {% endif %}
 
       <div class="action-button">
-        <a href="{% url 'resume_generate' %}" class="btn-primary"><i class="fas fa-plus-circle"></i> Générer un nouveau résumé</a>
+        <a href="{% url 'resume_generate' %}" class="btn-primary">
+          <i class="fas fa-plus-circle"></i> Générer un nouveau résumé
+        </a>
       </div>
     </div>
   </main>
 
+  <!-- Modal confirmation -->
+  <div id="deleteModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Supprimer le résumé ?</h3>
+      <p id="modal-text"></p>
+      <form id="deleteForm" method="POST">
+        {% csrf_token %}
+        <div class="modal-actions">
+          <button type="submit" class="btn-confirm">Oui, supprimer</button>
+          <button type="button" class="btn-cancel">Annuler</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   {% include 'partials/footer.html' %}
 </body>
+
+<script>
+  const deleteButtons = document.querySelectorAll('.btn-delete');
+  const modal = document.getElementById('deleteModal');
+  const modalText = document.getElementById('modal-text');
+  const deleteForm = document.getElementById('deleteForm');
+  const cancelBtn = modal.querySelector('.btn-cancel');
+
+  deleteButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const resumeId = btn.dataset.resumeId;
+      const resumeTitle = btn.dataset.resumeTitle;
+      modalText.textContent = `Êtes-vous sûr de vouloir supprimer "${resumeTitle}" ?`;
+      deleteForm.action = `/resumes/${resumeId}/delete/`; // adapte à ton URL Django
+      modal.style.display = 'flex';
+    });
+  });
+
+  cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+  window.addEventListener('click', (e) => { if(e.target === modal) modal.style.display = 'none'; });
+</script>
 </html>
