@@ -360,3 +360,88 @@ def text_to_speech_base64(text: str, lang: str | None = None) -> str:
         logger.error(f"TTS error (lang={lang}): {e}")
         return ""
     
+
+
+    _title_generator = None
+
+_title_generator = None
+
+def get_title_generator():
+    global _title_generator
+    if _title_generator is None:
+        try:
+            _title_generator = pipeline(
+                "text2text-generation",
+                model="moussaKam/barthez-base-french-summarization",
+                max_length=32,
+                min_length=8,
+                do_sample=False,
+                truncation=True,
+            )
+            logger.info("Title generator pipeline loaded")
+        except Exception as e:
+            logger.error(f"Title generator failed: {e}")
+            _title_generator = None
+    return _title_generator
+
+
+def generate_summary_title(
+    notes_contents: list[str],
+    period: str,
+    category: str | None = None,
+    max_words: int = 10
+) -> str:
+    full_text = " ".join(notes_contents)[:1500]
+
+    # Sentiment
+    sentiment = analyze_sentiment(full_text)
+    sentiment_word = ""
+    if sentiment:
+        mood = suggest_mood(sentiment["label"])
+        sentiment_word = {"joyeux": "positif", "triste": "négatif", "neutre": ""}.get(mood, "")
+
+    # Category fallback
+    if not category:
+        cat_res = classify_category(full_text)
+        category = cat_res["category"] if cat_res else None
+
+    # Tags
+    tags = generate_tags(full_text, max_tags=3)
+    key_phrase = " ".join(tags[:2]).strip()
+
+    # AI generation
+    prompt = (
+        f"Résume en une phrase courte et accrocheuse les notes suivantes : "
+        f"{' '.join(notes_contents)[:800]}. "
+        f"Thème principal : {key_phrase or 'divers'}. "
+        f"Sentiment : {sentiment_word or 'neutre'}."
+    )
+
+    generator = get_title_generator()
+    if generator:
+        try:
+            result = generator(prompt, num_return_sequences=1)[0]["generated_text"]
+            title = result.strip().split("\n")[0].split(".")[0].split("!")[0].split("?")[0].strip()
+            words = title.split()
+            if len(words) > max_words:
+                title = " ".join(words[:max_words]) + "…"
+            if title:
+                return title
+        except Exception as e:
+            logger.warning(f"AI title failed: {e}")
+
+    # Fallback
+    parts = []
+    if sentiment_word:
+        parts.append(sentiment_word.capitalize())
+    if key_phrase:
+        parts.append(key_phrase.capitalize())
+    if category:
+        parts.append(category.capitalize())
+    if period == "week":
+        parts.append("de la semaine")
+    elif period == "month":
+        parts.append("du mois")
+
+    fallback = " ".join(p for p in parts if p) or "Résumé"
+    return fallback

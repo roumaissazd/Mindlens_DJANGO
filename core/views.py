@@ -11,7 +11,8 @@ import json
 
 from .forms import SignUpForm, NoteForm, SearchForm, ResumeGenerateForm
 from .models import Note, Tag, Resume
-from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64
+from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64, generate_summary_title  
+
 from .search_utils import index_note, remove_note_from_index, search_notes
 from django.contrib import messages
 
@@ -414,35 +415,38 @@ def resume_generate(request):
 
         notes = Note.objects.filter(user=request.user)
 
-        # Filtrer par période
+        # --- FILTERS -------------------------------------------------
         now = timezone.now()
         if period == 'week':
             notes = notes.filter(created_at__gte=now - timedelta(days=7))
         elif period == 'month':
             notes = notes.filter(created_at__gte=now - timedelta(days=30))
-
-        # Filtrer par catégorie
         if category:
             notes = notes.filter(category=category)
 
-        # Récupérer le contenu des notes
         notes_contents = [note.content for note in notes]
 
         if notes_contents:
+            # 1. Summary
             summary_text = generate_summary_from_notes(notes_contents)
 
-            # ---- NEW: Create title with date ----
-            title = f"Résumé {period}"
-            if category:
-                title += f" - {category}"
-            title += f" ({now.strftime('%d/%m/%Y')})"
+            # 2. AI TITLE (new!)
+            ai_title = generate_summary_title(
+                notes_contents,
+                period=period,
+                category=category
+            )
 
-            # Sauvegarder le résumé
+            # 3. Final title (AI + date)
+            date_str = now.strftime("%d/%m/%Y")
+            final_title = f"{ai_title} ({date_str})"
+
+            # 4. Save
             generated_resume = Resume.objects.create(
                 author=request.user,
-                title=title,
+                title=final_title,
                 content=summary_text,
-                notes_ids=[note.id for note in notes]  # Keep this for future use
+                notes_ids=[note.id for note in notes]
             )
 
     return render(request, "resumes/resume_generate.html", {

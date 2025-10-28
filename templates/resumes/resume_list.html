@@ -186,7 +186,7 @@
           {% for resume in resumes %}
             <div class="resume-card">
               <a href="{% url 'resume_detail' resume.pk %}" class="resume-link">
-                <h3>{{ resume.title|default:"Résumé sans titre" }}</h3>
+<h3>{{ resume.title|default:"Résumé sans titre" }}</h3>
                 <p class="resume-date">
                   <i class="far fa-calendar-alt"></i> {{ resume.created_at|date:"d/m/Y à H:i" }}
                 </p>
