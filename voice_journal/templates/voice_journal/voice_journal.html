@@ -624,14 +624,20 @@
                                                currentReply.includes('oui/non') ||
                                                currentReply.includes('ou pas');
                         
-                        // Réduire le délai de silence pour les réponses musicales
-                        const silenceThreshold = isMusicResponse ? 1000 : 2500; // 1s pour musique, 2.5s pour le reste
+                        // Réduire le délai de silence pour répondre plus vite
+                        const isQuickResponse = isMusicResponse || 
+                                               currentReply.includes('dis-moi') ||
+                                               currentReply.includes('veux-tu') ||
+                                               currentReply.includes('souhaites-tu') ||
+                                               currentReply.includes('besoin d\'autre chose');
+                        
+                        const silenceThreshold = isQuickResponse ? 800 : 1800; // 0.8s pour réponses rapides, 1.8s pour le reste
                         
                         if (silentMs >= silenceThreshold) {
                             // Délai supplémentaire pour s'assurer que l'utilisateur a terminé
                             statusEl.textContent = 'Traitement… (attendez)';
                             
-                            const delay = isMusicResponse ? 100 : 500; // Délai très réduit pour les réponses musicales
+                            const delay = isQuickResponse ? 100 : 300; // Délai très réduit pour les réponses rapides
                             setTimeout(async () => {
                                 await finalizeTurn();
                             }, delay);
@@ -796,28 +802,59 @@
                     if (mood === 'sad') utter.rate = 0.95;
                     if (mood === 'stressed') utter.rate = 0.98;
                     window.speechSynthesis.cancel();
-                    utter.onend = () => { if (typeof onend === 'function') onend(); };
-                    window.speechSynthesis.speak(utter);
                     
-                    // Détecter les instructions de respiration et démarrer l'animation
+                    // Détecter les instructions de respiration AVANT de parler
+                    let breathingAnimationType = null;
+                    let breathingDuration = 0;
                     if (text && typeof text === 'string') {
                         const breathingText = text.toLowerCase();
-                        if (breathingText.includes('respir') || breathingText.includes('commence') || breathingText.includes('exercice')) {
-                            // Démarrer l'animation dès que l'assistant commence l'exercice
+                        
+                        // Masquer l'animation si l'exercice est terminé
+                        if (breathingText.includes('très bien') || 
+                            breathingText.includes('refait') || 
+                            breathingText.includes('besoin d\'autre chose') ||
+                            breathingText.includes('souhaites-tu refaire')) {
                             setTimeout(() => {
-                                startBreathingAnimation(text);
-                            }, 1000); // Attendre 1 seconde que l'assistant commence à parler
+                                const animationEl = document.getElementById('breathingAnimation');
+                                animationEl.style.display = 'none';
+                                breathingStepCount = 0;
+                            }, 1000);
+                        }
+                        // Détecter "Inspire 4 secondes"
+                        else if (breathingText.includes('inspire 4')) {
+                            breathingAnimationType = 'inspire';
+                            breathingDuration = 4;
+                        }
+                        // Détecter "Bloque 4 secondes"
+                        else if (breathingText.includes('bloque 4')) {
+                            breathingAnimationType = 'hold';
+                            breathingDuration = 4;
+                        }
+                        // Détecter "Expire 6 secondes"
+                        else if (breathingText.includes('expire') && breathingText.includes('6')) {
+                            breathingAnimationType = 'expire';
+                            breathingDuration = 6;
                         }
                     }
+                    
+                    // Créer le callback qui gère à la fois onend et l'animation
+                    utter.onend = () => { 
+                        if (typeof onend === 'function') onend();
+                        // Déclencher l'animation après que l'AI termine de parler
+                        if (breathingAnimationType) {
+                            triggerBreathingStep(breathingAnimationType, breathingDuration);
+                        }
+                    };
+                    
+                    window.speechSynthesis.speak(utter);
                 } catch {}
             }
             
             // Animation de respiration avec gestion des étapes
-            let breathingSteps = [];
-            let currentStep = 0;
+            let breathingStepCount = 0;
             let breathingInterval = null;
             
-            function startBreathingAnimation(instruction) {
+            function triggerBreathingStep(type, duration) {
                 const animationEl = document.getElementById('breathingAnimation');
                 const stepEl = document.getElementById('stepText');
                 const timerEl = document.getElementById('timerText');
@@ -825,67 +862,51 @@
                 const instructionEl = document.getElementById('instructionText');
                 const visualEl = document.getElementById('breathingVisual');
                 
+                // Afficher l'animation si ce n'est pas déjà fait
                 animationEl.style.display = 'block';
                 
-                // Définir toutes les étapes de respiration
-                breathingSteps = [
-                    { text: 'Inspirez pendant 4 secondes', duration: 4, style: 'inspire', step: 1 },
-                    { text: 'Bloquez pendant 4 secondes', duration: 4, style: 'hold', step: 2 },
-                    { text: 'Expirez pendant 6 secondes', duration: 6, style: 'expire', step: 3 }
-                ];
-                
-                currentStep = 0;
-                runBreathingStep();
-            }
-            
-            function runBreathingStep() {
-                if (currentStep >= breathingSteps.length) {
-                    // Fin de l'exercice
-                    const animationEl = document.getElementById('breathingAnimation');
-                    const timerEl = document.getElementById('timerText');
-                    const progressEl = document.getElementById('progressBar');
-                    const instructionEl = document.getElementById('instructionText');
-                    const visualEl = document.getElementById('breathingVisual');
-                    const stepEl = document.getElementById('stepText');
-                    
-                    timerEl.textContent = '✓ Terminé';
-                    progressEl.style.width = '100%';
-                    instructionEl.textContent = 'Exercice terminé !';
-                    stepEl.textContent = 'Exercice complet';
-                    visualEl.style.background = '#10B981';
-                    visualEl.style.transform = 'scale(1.2)';
-                    
-                    // Masquer l'animation après 3 secondes
-                    setTimeout(() => {
-                        animationEl.style.display = 'none';
-                    }, 3000);
-                    return;
+                // Arrêter toute animation en cours
+                if (breathingInterval) {
+                    clearInterval(breathingInterval);
+                    breathingInterval = null;
                 }
                 
-                const step = breathingSteps[currentStep];
-                const timerEl = document.getElementById('timerText');
-                const progressEl = document.getElementById('progressBar');
-                const instructionEl = document.getElementById('instructionText');
-                const visualEl = document.getElementById('breathingVisual');
-                const stepEl = document.getElementById('stepText');
+                // Définir le texte et le style selon le type
+                let text, style, stepNum;
+                if (type === 'inspire') {
+                    text = 'Inspirez pendant 4 secondes';
+                    style = 'inspire';
+                    stepNum = 1;
+                    breathingStepCount = 1;  // Première vraie étape
+                } else if (type === 'hold') {
+                    text = 'Bloquez pendant 4 secondes';
+                    style = 'hold';
+                    stepNum = 2;
+                    breathingStepCount = 2;  // Deuxième étape
+                } else if (type === 'expire') {
+                    text = 'Expirez pendant 6 secondes';
+                    style = 'expire';
+                    stepNum = 3;
+                    breathingStepCount = 3;  // Troisième étape
+                }
                 
                 // Mettre à jour l'interface
-                stepEl.textContent = `Étape ${step.step}/3`;
-                instructionEl.textContent = step.text;
-                timerEl.textContent = step.duration;
+                stepEl.textContent = `Étape ${stepNum}/3`;
+                instructionEl.textContent = text;
+                timerEl.textContent = duration;
                 progressEl.style.width = '0%';
                 
                 // Animation visuelle selon le type
-                updateVisualStyle(visualEl, step.style);
+                updateVisualStyle(visualEl, style);
                 
-                let timeLeft = step.duration;
+                let timeLeft = duration;
                 
                 breathingInterval = setInterval(() => {
                     timeLeft--;
                     timerEl.textContent = timeLeft;
                     
                     // Mettre à jour la barre de progression
-                    const progress = ((step.duration - timeLeft) / step.duration) * 100;
+                    const progress = ((duration - timeLeft) / duration) * 100;
                     progressEl.style.width = progress + '%';
                     
                     // Animation du cercle
@@ -897,19 +918,77 @@
                         timerEl.textContent = '✓';
                         progressEl.style.width = '100%';
                         visualEl.style.transform = 'scale(1)';
+                        breathingInterval = null;
                         
-                        // Passer à l'étape suivante après 1 seconde
-                        setTimeout(() => {
-                            currentStep++;
-                            runBreathingStep();
-                        }, 1000);
+                        // Si ce n'est pas la dernière étape, récupérer automatiquement l'étape suivante
+                        if (breathingStepCount < 3 && inCall) {
+                            // Petit délai pour que l'utilisateur voie le ✓
+                            setTimeout(() => {
+                                requestNextBreathingStep();
+                            }, 300);
+                        }
                     }
                 }, 1000);
             }
             
-            function extractDuration(text) {
-                const match = text.match(/(\d+)\s*secondes?/);
-                return match ? parseInt(match[1]) : null;
+            async function requestNextBreathingStep() {
+                // Envoyer une requête vide au serveur pour obtenir l'étape suivante
+                try {
+                    const fd = new FormData();
+                    fd.append('audio', new Blob(), 'empty.webm');
+                    const supportCard = document.getElementById('supportCard');
+                    const mood = supportCard?.dataset?.mood || '';
+                    if (mood) fd.append('mood', mood);
+                    
+                    const res = await fetch('/voice-journal/api/voice-agent-turn/', {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        const replyEl = document.getElementById('agentReply');
+                        replyEl.textContent = data.reply_text || '';
+                        statusEl.textContent = 'Assistant parle…';
+                        
+                        const replyText = replyEl.textContent.toLowerCase();
+                        
+                        // Si le texte contient "Très bien" ou "refait", on a terminé l'exercice
+                        if (replyText.includes('très bien') || replyText.includes('refait') || replyText.includes('besoin d\'autre chose')) {
+                            // Attendre que l'utilisateur réponde avant de commencer à écouter
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                if (data.end_call) {
+                                    stopCall();
+                                } else {
+                                    // Laisser un petit délai puis commencer à écouter
+                                    setTimeout(() => {
+                                        if (inCall) beginListening();
+                                    }, 500);
+                                }
+                            });
+                        } 
+                        // Si c'est l'introduction "commence une respiration", obtenir la prochaine étape immédiatement
+                        else if (replyText.includes('commence une respiration')) {
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                // Attendre un instant puis obtenir l'étape suivante (Inspire 4 secondes)
+                                setTimeout(() => {
+                                    requestNextBreathingStep();
+                                }, 300);
+                            });
+                        }
+                        // C'est une instruction de respiration, démarrer l'animation après que l'AI parle
+                        else {
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                if (data.end_call) {
+                                    stopCall();
+                                }
+                                // Ne pas appeler beginListening - l'animation sera déclenchée automatiquement
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.log('Erreur lors de la récupération de l\'étape suivante:', e);
+                }
             }
             
             function updateVisualStyle(element, style) {
@@ -941,6 +1020,7 @@
                 try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
                 try { if (breathingInterval) { clearInterval(breathingInterval); breathingInterval = null; } } catch {}
                 try { document.getElementById('breathingAnimation').style.display = 'none'; } catch {}
+                breathingStepCount = 0; // Reset breathing step counter
                 talkBtn.disabled = false;
                 stopBtn.disabled = true;
                 statusEl.textContent = '';

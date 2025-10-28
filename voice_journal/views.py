@@ -328,19 +328,19 @@ def generate_opening_prompt(final_mood: str) -> str:
     mood = (final_mood or 'neutral').lower()
     if mood == 'sad':
         return (
-            "Je perçois un peu de tristesse. Souhaites-tu que l'on parle et que je te propose des pistes pour te sentir mieux ? "
-            "Tu peux dire ‘oui’ ou me dire ce qui te pèse."
+            "Je perçois un peu de tristesse. Veux-tu en parler à voix haute? "
+            "Dis-moi ce que tu veux faire : on peut parler, faire un exercice de respiration, ou écouter de la musique apaisante."
         )
     if mood == 'stressed':
         return (
-            "On dirait que le stress est présent. Veux-tu des conseils rapides ou des exercices de respiration guidés ? "
-            "Tu peux dire ‘oui’ pour commencer."
+            "Je sens du stress. Que veux-tu faire maintenant ? "
+            "On peut faire un exercice de respiration, parler de ce qui te stresse, ou écouter de la musique relaxante."
         )
     if mood == 'happy':
-        return "Génial d'entendre cela ! Veux-tu célébrer ce qui s'est bien passé aujourd'hui ?"
+        return "Content d'entendre cela ! Que veux-tu faire maintenant ? On peut célébrer, se détendre, ou juste discuter."
     if mood == 'calm':
-        return "Ambiance apaisée. Souhaites-tu ancrer une intention pour la suite de la journée ?"
-    return "Bonjour ! Veux-tu me dire comment tu te sens et ce dont tu as besoin ?"
+        return "Ambiance apaisée. Que souhaites-tu faire ? On peut ancrer une intention, écouter de la musique, ou juste causer."
+    return "Bonjour ! Que veux-tu faire maintenant ? On peut parler, faire un exercice, ou écouter de la musique."
 
 
 def detect_user_intent_yes_no(text: str) -> str:
@@ -905,7 +905,19 @@ def api_voice_agent_turn(request):
                     'intent': intent,
                     'end_call': end_call_local,
                 })
-            return JsonResponse({'error': 'No audio provided'}, status=400)
+            # Accepter les requêtes vides même en dehors du mode respiration
+            text = ''
+            intent = 'unknown'
+            reply, state_next, end_call_local, intent = route_next(state, text)
+            request.session['agent_state'] = state_next
+            request.session.modified = True
+            return JsonResponse({
+                'success': True,
+                'user_text': '',
+                'reply_text': reply,
+                'intent': intent,
+                'end_call': end_call_local,
+            })
 
         # Save temp input
         audio_file = request.FILES['audio']
@@ -1010,6 +1022,39 @@ def api_voice_agent_turn(request):
 
             # Move to breathing if stressed/sad + user wants calm/tips or says yes at support
             if topic == 'support':
+                # Handle end-of-session question
+                if 'besoin d\'autre chose' in text.lower() or 'd\'autre chose' in text.lower() or 'continuer' in text.lower():
+                    if intent == 'no':
+                        reply = (
+                            "Très bien. Je suis content d'avoir pu t'accompagner. "
+                            "N'hésite pas à revenir quand tu en as besoin. Prends soin de toi."
+                        )
+                        end_call_local = True
+                        return reply, {'topic': 'end', 'step': 0, 'mood': mood_s}, end_call_local, intent
+                    elif intent == 'yes':
+                        # Ask what they want to do next
+                        reply = "Que veux-tu faire ? On peut parler, faire une respiration, ou écouter de la musique."
+                        return reply, {'topic': 'support', 'step': 0, 'mood': mood_s}, False, intent
+                
+                # Si l'utilisateur dit juste "oui" après qu'on ait mentionné la musique, donner de la musique
+                if intent == 'yes' and 'musique' in state.get('last_message', '').lower():
+                    vids = get_youtube_music_recommendations(mood_s)
+                    if vids:
+                        state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
+                        return "Extrait musical.", state_next, False, intent
+                
+                # Si demande explicite de musique, y aller directement
+                if wants_music:
+                    vids = get_youtube_music_recommendations(mood_s)
+                    if vids:
+                        state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
+                        return "Extrait musical.", state_next, False, intent
+                
+                # Si "oui" seul sans contexte spécifique, clarifier
+                if intent == 'yes' and not wants_breathing and not wants_music and not wants_tips:
+                    reply = "Que veux-tu faire ? De la musique apaisante, une respiration, ou autre chose ?"
+                    return reply, {'topic': 'support', 'step': 0, 'mood': mood_s, 'last_message': reply}, False, intent
+                
                 if intent == 'yes' or wants_breathing or wants_tips or mood_s in {'stressed', 'sad'}:
                     topic = 'breathing'
                     step = 0
@@ -1020,39 +1065,49 @@ def api_voice_agent_turn(request):
 
             # Breathing protocol (box breathing like 4-4-6, then reflect)
             if topic == 'breathing':
+                introduction = "D'accord. On commence une respiration simple."
                 guide = [
-                    "D'accord. On commence une respiration simple. Inspire 4 secondes.",
-                    "Bloque 4 secondes.",
-                    "Expire doucement 6 secondes.",
-                    "Très bien. On refait une fois si tu veux. Dis 'oui' pour refaire, sinon 'non'.",
+                    introduction,  # step 0: Introduction
+                    "Inspire 4 secondes.",  # step 1: Première instruction
+                    "Bloque 4 secondes.",  # step 2
+                    "Expire doucement 6 secondes.",  # step 3
+                    "Très bien. On refait une fois si tu veux. Dis 'oui' pour refaire, sinon 'non'.",  # step 4
                 ]
-                if step < len(guide):
+                
+                # Si step est 0 (début), donner l'introduction et passer à step 1
+                if step == 0:
+                    reply = guide[0]
+                    state['topic'] = 'breathing'
+                    state['step'] = 1
+                    return reply, state, False, intent
+                
+                # Si step est 1, 2, ou 3, donner automatiquement l'étape suivante sans attendre
+                elif step < len(guide):
                     reply = guide[step]
-                    step += 1
+                    state['topic'] = 'breathing'
+                    state['step'] = step + 1
+                    return reply, state, False, intent
+                
+                # Si on est à la fin (step == len(guide)), demander si on refait
                 else:
+                    state['auto_continue'] = False
                     if intent == 'yes':
-                        step = 0
+                        state['step'] = 0
                         reply = guide[0]
+                        state['topic'] = topic
                     elif intent == 'no':
                         reply = (
-                            "Parfait. Comment te sens-tu maintenant ? Si tu veux, je peux sugerer une petite action positive (ex: marcher 2 minutes)."
+                            "Très bien. Est-ce que tu veux écouter de la musique apaisante, "
+                            "ou as-tu besoin d'autre chose ? Dis-moi ce que tu veux."
                         )
                         topic = 'support'
-                        step = 0
-                    elif intent == 'unknown' and not text.strip():
-                        # Si l'utilisateur ne dit rien pendant l'exercice, continuer automatiquement
-                        if step == 1:  # "Bloque 4 secondes" - étape silencieuse
-                            reply = guide[step]  # "Expire doucement 6 secondes"
-                            step += 1
-                        elif step == 2:  # "Expire doucement 6 secondes" - étape silencieuse
-                            reply = guide[step]  # Demander si on refait
-                            step += 1
-                        else:
-                            # Si on est à la fin et pas de réponse, proposer de continuer
-                            reply = "Souhaites-tu refaire un cycle de respiration ?"
+                        state['topic'] = topic
+                        state['step'] = 0
+                        state['last_message'] = reply
                     else:
                         reply = "Souhaites-tu refaire un cycle de respiration ?"
-                return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+                
+                return reply, state, False, intent
 
 
             # Fallback
@@ -1065,6 +1120,8 @@ def api_voice_agent_turn(request):
             intent = 'unknown'
         else:
             reply_text, new_state, end_call, intent = route_next(state, transcription)
+            # Stocker le dernier message pour le contexte
+            new_state['last_message'] = reply_text
             request.session['agent_state'] = new_state
             request.session.modified = True
 
