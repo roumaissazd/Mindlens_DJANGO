@@ -15,6 +15,14 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    import os
+    load_dotenv(BASE_DIR / '.env')  # Load .env file from project root
+except ImportError:
+    pass
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -142,3 +150,6 @@ WHOOSH_INDEX_DIR = BASE_DIR / 'whoosh_index'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Groq API Key (for LLM functionality)
+GROQ_API_KEY = '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'

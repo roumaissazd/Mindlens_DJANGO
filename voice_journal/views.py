@@ -12,10 +12,21 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.conf import settings
-import os
 import requests
 from .models import VoiceJournal
 import time
+from pathlib import Path
+
+# Get project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# LLM for intelligent replies
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except:
+    GROQ_AVAILABLE = False
+    print("Groq not available. Install with: pip install groq")
 
 # Import ML libraries with error handling (spaces only)
 ML_LIBRARIES_AVAILABLE = True
@@ -188,14 +199,18 @@ def get_asr_pipeline():
         raise ImportError("ML libraries not available")
     global _asr_pipeline
     
-    # Always create a fresh pipeline to avoid tensor size conflicts
+    # Use cached pipeline if available
+    if _asr_pipeline is not None:
+        return _asr_pipeline
+    
     try:
-        # Uses Hugging Face Whisper model locally
+        # Uses Hugging Face Whisper model locally with PyTorch backend
         # Small/base models are faster and lighter
+        print("[ASR] Creating Whisper pipeline... (this may take a while on first use)")
         _asr_pipeline = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            device="cpu",
+            device=-1,  # Use CPU (avoiding GPU dependencies)
             chunk_length_s=30,
             return_timestamps=False,
             generate_kwargs={
@@ -203,7 +218,7 @@ def get_asr_pipeline():
                 'language': getattr(settings, 'ASR_LANGUAGE', 'fr')
             },
         )
-        print("[ASR] Fresh Whisper pipeline created")
+        print("[ASR] Whisper pipeline created successfully")
     except Exception as e:
         print(f"[ASR] Error creating pipeline: {e}")
         # Reset global variable on error
@@ -327,20 +342,88 @@ def generate_empathetic_reply(final_mood: str, user_text: str) -> str:
 def generate_opening_prompt(final_mood: str) -> str:
     mood = (final_mood or 'neutral').lower()
     if mood == 'sad':
-        return (
-            "Je perçois un peu de tristesse. Veux-tu en parler à voix haute? "
-            "Dis-moi ce que tu veux faire : on peut parler, faire un exercice de respiration, ou écouter de la musique apaisante."
-        )
+        return "Bonjour, je suis là pour t'écouter. Dis-moi ce que tu ressens ou ce dont tu as besoin."
     if mood == 'stressed':
-        return (
-            "Je sens du stress. Que veux-tu faire maintenant ? "
-            "On peut faire un exercice de respiration, parler de ce qui te stresse, ou écouter de la musique relaxante."
-        )
+        return "Salut, je comprends que tu sois stressé(e). Parle-moi de ce qui se passe ou ce que tu aimerais faire."
     if mood == 'happy':
-        return "Content d'entendre cela ! Que veux-tu faire maintenant ? On peut célébrer, se détendre, ou juste discuter."
+        return "Bonjour ! Ça fait plaisir d'entendre ça. Que veux-tu partager ?"
     if mood == 'calm':
-        return "Ambiance apaisée. Que souhaites-tu faire ? On peut ancrer une intention, écouter de la musique, ou juste causer."
-    return "Bonjour ! Que veux-tu faire maintenant ? On peut parler, faire un exercice, ou écouter de la musique."
+        return "Hello, ambiance apaisée. Que veux-tu faire ? On peut discuter, écouter de la musique, ou autre chose."
+    return "Bonjour ! Je suis là pour toi. Dis-moi ce que tu ressens ou ce dont tu as besoin."
+
+
+def generate_llm_reply(user_text: str, mood: str, conversation_history: list = None) -> str:
+    """
+    Generate intelligent reply using Groq LLM (free).
+    Falls back to rule-based if Groq not available.
+    """
+    # Get API key from settings
+    api_key = getattr(settings, 'GROQ_API_KEY', '')
+    
+    print(f"[LLM] Checking Groq: available={GROQ_AVAILABLE}, has_key={bool(api_key)}")
+    
+    if not GROQ_AVAILABLE or not api_key:
+        print("[LLM] Groq not available, using fallback")
+        # Fallback to rule-based
+        return generate_empathetic_reply(mood, user_text)
+    
+    try:
+        client = Groq(api_key=api_key)
+        
+        # Build context
+        context = f"""Tu es un assistant vocal empathique et naturel. L'utilisateur semble être {mood}.
+
+Réponds de façon:
+- Naturelle, comme à un ami
+- Courte (1-2 phrases max 20 mots)
+- Empathique et chaleureux
+- Personnalisée selon ce qu'il dit
+
+Tu peux:
+- L'écouter et répondre avec des mots qui tiennent
+- Poser des questions
+- Donner des conseils si il en demande
+- Proposer de la musique seulement si il mentionne vouloir écouter
+- Proposer une respiration seulement si il est très stressé
+
+Reste naturel, pas robotique. Réponds comme tu penserais si c'était un ami qui te parle."""
+
+        messages = [
+            {"role": "system", "content": context}
+        ]
+        
+        # Add conversation history
+        if conversation_history:
+            messages.extend(conversation_history[-4:])  # Keep last 4 exchanges
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_text})
+        
+        # Generate response
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # Free, fast model
+            messages=messages,
+            max_tokens=100,
+            temperature=0.7,
+        )
+        
+        reply = response.choices[0].message.content.strip()
+        
+        # Post-processing to keep it short
+        if len(reply) > 80:
+            # Try to cut at a sentence boundary
+            sentences = reply.split('. ')
+            if len(sentences) > 1:
+                reply = sentences[0] + '.'
+            else:
+                reply = reply[:80] + '...'
+        
+        return reply
+        
+    except Exception as e:
+        print(f"[LLM Error] {e}")
+        # Fallback to rule-based
+        return generate_empathetic_reply(mood, user_text)
 
 
 def detect_user_intent_yes_no(text: str) -> str:
@@ -674,24 +757,24 @@ def process_audio(request):
             
             # Transcribe audio using Whisper (Hugging Face transformers)
             t_asr0 = time.time()
+            transcription = ""
             try:
+                print(f"[ASR] Starting transcription of {wav_full_path}")
                 asr = get_asr_pipeline()
-                asr_result = asr(wav_full_path)
-                transcription = asr_result.get("text", "")
-                print(f"[ASR] Transcription successful: '{transcription}'")
+                asr_result = asr(wav_full_path, return_timestamps=False)
+                transcription = asr_result.get("text", "").strip()
+                if transcription:
+                    print(f"[ASR] Transcription successful: '{transcription[:50]}...'")
+                else:
+                    print("[ASR] Transcription returned empty string")
             except Exception as e:
-                print(f"[ASR] Error during transcription: {e}")
-                # Try to reset and retry once
-                try:
-                    global _asr_pipeline
-                    _asr_pipeline = None  # Force reset
-                    asr = get_asr_pipeline()
-                    asr_result = asr(wav_full_path)
-                    transcription = asr_result.get("text", "")
-                    print(f"[ASR] Retry successful: '{transcription}'")
-                except Exception as retry_e:
-                    print(f"[ASR] Retry failed: {retry_e}")
-                    transcription = "Erreur de transcription - veuillez réessayer"
+                print(f"[ASR] Error during transcription: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Fallback - use audio emotion for mood detection instead
+                transcription = "[Enregistrement audio non transcrit]"
+                print("[ASR] Using fallback transcription")
             t_asr1 = time.time()
             
             # Analyze text sentiment
@@ -888,16 +971,29 @@ def api_voice_agent_turn(request):
             })
 
         if 'audio' not in request.FILES:
-            # Pendant les exercices de respiration, accepter les requêtes vides
-            state = request.session.get('agent_state', {})
+            # Requête sans audio - initialiser le state si nécessaire
+            state = request.session.get('agent_state')
+            if not state:
+                # Première requête sans start=1 - initialiser
+                state = {
+                    'topic': 'support',
+                    'step': 0,
+                    'mood': final_mood or 'neutral'
+                }
+                request.session['agent_state'] = state
+                request.session.modified = True
+            
             topic = state.get('topic', 'support')
-            if topic == 'breathing':
-                # Continuer l'exercice de respiration même sans audio
-                text = ''
-                intent = 'unknown'
+            text = ''
+            intent = 'unknown'
+            
+            # Appeler route_next pour obtenir la réponse
+            try:
                 reply, state_next, end_call_local, intent = route_next(state, text)
+                state_next['mood'] = state.get('mood', final_mood)
                 request.session['agent_state'] = state_next
                 request.session.modified = True
+                
                 return JsonResponse({
                     'success': True,
                     'user_text': '',
@@ -905,19 +1001,11 @@ def api_voice_agent_turn(request):
                     'intent': intent,
                     'end_call': end_call_local,
                 })
-            # Accepter les requêtes vides même en dehors du mode respiration
-            text = ''
-            intent = 'unknown'
-            reply, state_next, end_call_local, intent = route_next(state, text)
-            request.session['agent_state'] = state_next
-            request.session.modified = True
-            return JsonResponse({
-                'success': True,
-                'user_text': '',
-                'reply_text': reply,
-                'intent': intent,
-                'end_call': end_call_local,
-            })
+            except Exception as e:
+                print(f"[Agent] Error in route_next: {e}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': str(e)}, status=400)
 
         # Save temp input
         audio_file = request.FILES['audio']
@@ -976,92 +1064,45 @@ def api_voice_agent_turn(request):
             wants_tips = any(k in t for k in ['conseil', 'astuce', 'propos', 'aide', 'idée', 'idee', 'donne', 'propose'])
             wants_music = any(k in t for k in ['musique', 'music', 'chanson', 'écouter', 'ecouter', 'playlist', 'lofi'])
 
-            # Handle music topic first (before checking for "no" exit)
+            # Handle music playback
             if topic == 'music':
-                vids = state.get('vids') or get_youtube_music_recommendations(mood_s)
-                step = int(state.get('step') or 0)
-                print(f"[VoiceAgent] Music context: intent='{intent}', step={step}, vids_count={len(vids) if vids else 0}")
-                
-                # Handle user feedback
-                if intent == 'yes':
-                    reply = (
-                        "Parfait ! As-tu besoin d'autre chose ? "
-                        "Je peux proposer une respiration ou quelques conseils."
-                    )
-                    # Revenir en mode support pour poursuivre l'échange
-                    return reply, {'topic': 'support', 'step': 0, 'mood': mood_s, 'vids': vids, 'liked': step}, False, intent
-                if intent == 'no':
-                    step += 1
-                # Serve next preview if available
-                if vids and step < len(vids):
-                    state_next = {'topic': 'music', 'step': step, 'mood': mood_s, 'vids': vids}
-                    return "Autre extrait musical.", state_next, False, intent
-                # No more previews
-                reply = "Plus d'extraits. Veux-tu une respiration guidée ?"
-                return reply, {'topic': 'breathing', 'step': 0, 'mood': mood_s}, False, intent
+                # Let LLM handle the conversation during music playback
+                conversation_history = state.get('history', [])
+                reply = generate_llm_reply(text, mood_s, conversation_history)
+                return reply, state, False, intent
 
-            # Music request is handled immediately from any topic
-            if wants_music:
-                vids = get_youtube_music_recommendations(mood_s)
-                idx = 0
-                if vids:
-                    state_next = {'topic': 'music', 'step': idx, 'mood': mood_s, 'vids': vids}
-                    return "Extrait musical.", state_next, False, intent
-                # Fallback if no videos
-                reply = "Pas de musique disponible. Veux-tu une respiration ?"
-                return reply, {'topic': 'support', 'step': 0, 'mood': mood_s}, False, intent
-
-            # Exit early on clear no - but only if not in music context
-            if intent == 'no' and topic != 'music':
-                reply = (
-                    "Merci pour ton retour. Je te souhaite un moment plus doux. "
-                    "Quand tu voudras, je serai là."
-                )
-                end_call_local = True
-                return reply, {'topic': 'end', 'step': 0, 'mood': mood_s}, end_call_local, intent
-
-            # Move to breathing if stressed/sad + user wants calm/tips or says yes at support
+            # Support mode - mostly handled by LLM
             if topic == 'support':
-                # Handle end-of-session question
-                if 'besoin d\'autre chose' in text.lower() or 'd\'autre chose' in text.lower() or 'continuer' in text.lower():
-                    if intent == 'no':
-                        reply = (
-                            "Très bien. Je suis content d'avoir pu t'accompagner. "
-                            "N'hésite pas à revenir quand tu en as besoin. Prends soin de toi."
-                        )
-                        end_call_local = True
-                        return reply, {'topic': 'end', 'step': 0, 'mood': mood_s}, end_call_local, intent
-                    elif intent == 'yes':
-                        # Ask what they want to do next
-                        reply = "Que veux-tu faire ? On peut parler, faire une respiration, ou écouter de la musique."
-                        return reply, {'topic': 'support', 'step': 0, 'mood': mood_s}, False, intent
                 
-                # Si l'utilisateur dit juste "oui" après qu'on ait mentionné la musique, donner de la musique
-                if intent == 'yes' and 'musique' in state.get('last_message', '').lower():
+                # Check if user explicitly wants music or breathing BEFORE asking LLM
+                text_lower = text.lower()
+                if 'musique' in text_lower or 'music' in text_lower:
+                    # User wants music
                     vids = get_youtube_music_recommendations(mood_s)
                     if vids:
                         state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
                         return "Extrait musical.", state_next, False, intent
                 
-                # Si demande explicite de musique, y aller directement
-                if wants_music:
-                    vids = get_youtube_music_recommendations(mood_s)
-                    if vids:
-                        state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
-                        return "Extrait musical.", state_next, False, intent
-                
-                # Si "oui" seul sans contexte spécifique, clarifier
-                if intent == 'yes' and not wants_breathing and not wants_music and not wants_tips:
-                    reply = "Que veux-tu faire ? De la musique apaisante, une respiration, ou autre chose ?"
-                    return reply, {'topic': 'support', 'step': 0, 'mood': mood_s, 'last_message': reply}, False, intent
-                
-                if intent == 'yes' or wants_breathing or wants_tips or mood_s in {'stressed', 'sad'}:
+                if 'respir' in text_lower or 'exercice' in text_lower:
+                    # User wants breathing
                     topic = 'breathing'
                     step = 0
-                else:
-                    # Stay supportive
-                    reply = generate_empathetic_reply(mood_s, text)
-                    return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+                    state['topic'] = topic
+                    state['step'] = step
+                    return reply, state, False, intent
+                
+                # Use LLM for ALL other replies
+                conversation_history = state.get('history', [])
+                reply = generate_llm_reply(text, mood_s, conversation_history)
+                
+                # Update conversation history
+                new_history = conversation_history + [
+                    {"role": "user", "content": text},
+                    {"role": "assistant", "content": reply}
+                ]
+                state['history'] = new_history[-6:]  # Keep last 6 messages
+                
+                return reply, state, False, intent
 
             # Breathing protocol (box breathing like 4-4-6, then reflect)
             if topic == 'breathing':
@@ -1110,9 +1151,15 @@ def api_voice_agent_turn(request):
                 return reply, state, False, intent
 
 
-            # Fallback
-            reply = generate_empathetic_reply(mood_s, text)
-            return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+            # Fallback - use LLM for any remaining cases
+            conversation_history = state.get('history', [])
+            reply = generate_llm_reply(text, mood_s, conversation_history)
+            new_history = conversation_history + [
+                {"role": "user", "content": text},
+                {"role": "assistant", "content": reply}
+            ]
+            state['history'] = new_history[-6:]
+            return reply, state, False, intent
 
         if not transcription:
             reply_text = "Je n'ai pas bien entendu. Peux-tu répéter en quelques mots ?"
