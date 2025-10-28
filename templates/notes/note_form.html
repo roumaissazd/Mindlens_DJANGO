@@ -45,7 +45,7 @@
           <span class="autosave-text">Sauvegarde automatique activée</span>
         </div>
 
-        <form method="post" class="note-form" id="noteForm">
+        <form method="post" class="note-form" id="noteForm" enctype="multipart/form-data">
           {% csrf_token %}
           
           {% if form.errors %}
@@ -64,6 +64,24 @@
             {{ form.title }}
             {% if form.title.help_text %}
               <p class="form-help">{{ form.title.help_text }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Image Upload Field -->
+          <div class="form-group">
+            <label for="{{ form.image.id_for_label }}" class="form-label">
+              Image
+              <span class="form-optional">(optionnel)</span>
+            </label>
+            {{ form.image }}
+            {% if form.image.help_text %}
+              <p class="form-help">{{ form.image.help_text }}</p>
+            {% endif %}
+            {% if note and note.image %}
+              <div class="current-image">
+                <p>Image actuelle :</p>
+                <img src="{{ note.image.url }}" alt="Image actuelle" style="max-width: 200px;">
+              </div>
             {% endif %}
           </div>
 

@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Note, Tag
+from .models import Note, Tag, Profile
 
 
 class SignUpForm(UserCreationForm):
@@ -27,7 +27,7 @@ class NoteForm(forms.ModelForm):
 
     class Meta:
         model = Note
-        fields = ['title', 'content', 'mood', 'category', 'is_favorite']
+        fields = ['title', 'content', 'image', 'mood', 'category', 'is_favorite']  # Ajout de 'image'
         widgets = {
             'title': forms.TextInput(attrs={
                 'placeholder': 'Titre de votre note (optionnel)',
@@ -37,6 +37,10 @@ class NoteForm(forms.ModelForm):
                 'placeholder': 'Écrivez vos pensées ici...',
                 'class': 'input textarea',
                 'rows': 10
+            }),
+            'image': forms.FileInput(attrs={
+                'class': 'input',
+                'accept': 'image/*'
             }),
             'mood': forms.Select(attrs={
                 'class': 'input'
@@ -130,5 +134,20 @@ class SearchForm(forms.Form):
         }),
         label='Tags'
     )
+
+
+class ProfileForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['photo_user']
+        widgets = {
+            'photo_user': forms.FileInput(attrs={
+                'class': 'input',
+                'accept': 'image/*'
+            })
+        }
+        labels = {
+            'photo_user': 'Photo de profil'
+        }
 
 

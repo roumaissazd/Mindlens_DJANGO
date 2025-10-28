@@ -24,6 +24,12 @@ urlpatterns = [
 
     # Export
     path('notes/export/json/', views.note_export_json, name='note_export_json'),
+
+    # Profile
+    path('profile/', views.profile_view, name='profile'),
+
+    # Détection de visages
+    path('notes/<int:pk>/detect-faces/', views.detect_faces_in_note, name='detect_faces_in_note'),
 ]
 
 

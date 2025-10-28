@@ -11,6 +11,10 @@ scipy
 safetensors
 sentencepiece
 whoosh
+deepface
+opencv-python
+retina-face
+pillow
 
 # Torch and torchaudio are installed separately for CPU wheels on Windows
 # Install with:

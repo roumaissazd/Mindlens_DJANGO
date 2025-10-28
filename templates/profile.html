@@ -1,0 +1,69 @@
+
+{% load static %}
+{% load form_tags %}
+
+
+{% block content %}
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mon Profil – MindLense</title>
+    <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  </head>
+  <body>
+    {% include 'partials/nav.html' %}
+    
+    <main class="container" style="max-width:760px;padding:40px 0;">
+      <h1 class="auth-title">Mon Profil</h1>
+      <p class="auth-sub">Gérez vos informations personnelles</p>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="auth-card">
+        <form method="post" enctype="multipart/form-data" class="form-grid">
+          {% csrf_token %}
+          
+          <div class="profile-photo-section">
+            {% if user.profile.photo_user %}
+              <img src="{{ user.profile.photo_user.url }}" alt="Photo de profil" class="profile-photo">
+            {% else %}
+              <div class="profile-photo-placeholder">
+                <span>🖼️</span>
+              </div>
+            {% endif %}
+            
+            <div>
+              <label class="form-label">Photo de profil</label>
+              {{ form.photo_user|add_class:'input' }}
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Nom d'utilisateur</label>
+            <input type="text" name="username" value="{{ user.username }}" class="input">
+          </div>
+
+          <div>
+            <label class="form-label">Email</label>
+            <input type="email" name="email" value="{{ user.email }}" class="input">
+          </div>
+
+          <button type="submit" class="btn-primary" style="width:100%;margin-top:20px;">
+            Mettre à jour le profil
+          </button>
+        </form>
+      </div>
+    </main>
+
+    {% include 'partials/footer.html' %}
+  </body>
+</html>
+{% endblock %}

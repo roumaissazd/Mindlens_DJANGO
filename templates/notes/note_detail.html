@@ -70,6 +70,107 @@
           {% endif %}
         </h1>
 
+        {% if note.image %}
+          <div class="note-detail-image">
+            <div class="image-container" style="position: relative;">
+              <img src="{{ note.image.url }}" alt="Image associée" id="noteImage" style="width:100%;height:auto;border-radius:12px;margin-bottom:20px;object-fit:cover;" />
+              <div id="faceOverlay"></div>
+            </div>
+            <button id="detectFacesBtn" class="btn-secondary">
+              <i class="fas fa-user-tag"></i> Détecter les visages
+            </button>
+          </div>
+          
+          <!-- Ajouter le CSS -->
+          <style>
+            .face-box {
+              position: absolute;
+              border: 2px solid #4A90E2;
+              pointer-events: none;
+              transition: all 0.3s ease;
+              background: rgba(74, 144, 226, 0.1);
+            }
+            
+            .face-tag {
+              position: absolute;
+              background: rgba(74, 144, 226, 0.9);
+              color: white;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: 12px;
+              pointer-events: none;
+              opacity: 0;
+              transition: opacity 0.3s ease;
+              white-space: nowrap;
+            }
+            
+            .face-box:hover + .face-tag {
+              opacity: 1;
+            }
+            
+            #detectFacesBtn {
+              margin-top: 10px;
+            }
+            
+            .image-container {
+              position: relative;
+              display: inline-block;
+            }
+          </style>
+
+          <!-- Ajouter le JavaScript -->
+          <script>
+            document.getElementById('detectFacesBtn').addEventListener('click', async function() {
+                try {
+                    console.log("Début de la détection...");
+                    const response = await fetch(`/notes/{{ note.pk }}/detect-faces/`);
+                    console.log("Réponse reçue:", response);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log("Données reçues:", data);
+                    
+                    if (data.success) {
+                        const overlay = document.getElementById('faceOverlay');
+                        overlay.innerHTML = '';
+                        
+                        const img = document.getElementById('noteImage');
+                        const imgRect = img.getBoundingClientRect();
+                        const scaleX = img.naturalWidth / img.width;
+                        const scaleY = img.naturalHeight / img.height;
+                        
+                        data.faces.forEach(face => {
+                            console.log("Traitement du visage:", face);
+                            
+                            const box = document.createElement('div');
+                            box.className = 'face-box';
+                            box.style.left = `${face.location.left / scaleX}px`;
+                            box.style.top = `${face.location.top / scaleY}px`;
+                            box.style.width = `${(face.location.right - face.location.left) / scaleX}px`;
+                            box.style.height = `${(face.location.bottom - face.location.top) / scaleY}px`;
+                            
+                            const tag = document.createElement('div');
+                            tag.className = 'face-tag';
+                            tag.textContent = `${face.username} (${Math.round(face.confidence)}%)`;
+                            tag.style.left = `${face.location.left / scaleX}px`;
+                            tag.style.top = `${(face.location.top / scaleY) - 25}px`;
+                            
+                            overlay.appendChild(box);
+                            overlay.appendChild(tag);
+                        });
+                    } else {
+                        console.error("Erreur:", data.error);
+                    }
+                } catch (error) {
+                    console.error('Erreur:', error);
+                }
+            });
+          </script>
+        {% endif %}
+
         <!-- Content -->
         <div class="note-detail-content">
           {{ note.content|linebreaks }}
