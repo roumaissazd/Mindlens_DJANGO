@@ -2,12 +2,16 @@
 AI utilities for note analysis using Hugging Face transformers.
 Includes sentiment analysis, category classification, and tag generation.
 """
-
+import base64
 from transformers import pipeline
 import logging
+from io import BytesIO
+from gtts import gTTS
+from langdetect import detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
 
 logger = logging.getLogger(__name__)
-
+DetectorFactory.seed = 0
 # Global pipelines (loaded once for performance)
 _sentiment_pipeline = None
 _zero_shot_pipeline = None
@@ -293,3 +297,66 @@ def generate_summary_from_notes(notes_contents, chunk_size=1000, max_summary_len
             print(f"Erreur IA chunk: {e}")
 
     return final_summary.strip()
+
+# --------------------------------------------------------------
+#  NEW: language-aware TTS → base64 MP3
+# --------------------------------------------------------------
+from langdetect import detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
+
+# make results deterministic (optional but nice)
+DetectorFactory.seed = 0
+
+
+def _detect_language(text: str) -> str:
+    """
+    Detect language code (ISO-639-1) of the first non-empty line.
+    Returns 'fr' as safe default.
+    """
+    # gTTS only needs the first part of the text for detection
+    sample = text.strip()[:500]
+    if not sample:
+        return "fr"
+
+    try:
+        code = detect(sample)
+        # gTTS supports only a subset of codes → map the most common ones
+        mapping = {
+            "fr": "fr", "en": "en", "es": "es", "de": "de", "it": "it",
+            "pt": "pt", "nl": "nl", "ru": "ru", "zh-cn": "zh-CN",
+            "ja": "ja", "ko": "ko", "ar": "ar", "hi": "hi",
+        }
+        return mapping.get(code, "fr")
+    except LangDetectException:
+        return "fr"
+
+
+def text_to_speech_base64(text: str, lang: str | None = None) -> str:
+    """
+    Convert *text* → MP3 → base64 string.
+    If *lang* is None → auto-detect language.
+    """
+    if not text.strip():
+        return ""
+
+    # --------------------------------------------------
+    # 1. Choose language
+    # --------------------------------------------------
+    if lang is None:
+        lang = _detect_language(text)          # ← auto-detect
+    else:
+        # keep user-provided code, but normalise a bit
+        lang = lang.lower().split("-")[0]
+
+    try:
+        tts = gTTS(text=text, lang=lang, slow=False)
+        buffer = BytesIO()
+        tts.write_to_fp(buffer)
+        buffer.seek(0)
+        b64 = base64.b64encode(buffer.read()).decode()
+        logger.info(f"TTS generated – lang:{lang}")
+        return b64
+    except Exception as e:
+        logger.error(f"TTS error (lang={lang}): {e}")
+        return ""
+    

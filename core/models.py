@@ -136,6 +136,8 @@ class Resume(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    audio_b64   = models.TextField(blank=True, null=True)   # <-- NEW
+    notes_ids  = models.JSONField(default=list)  # NEW: Store note IDs
 
     # Optionnel : stocker les notes résumées
     notes_ids = models.JSONField(default=list, blank=True)

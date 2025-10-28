@@ -7,6 +7,36 @@
   <title>{{ resume.title|default:"Résumé" }} – MindLense</title>
   <link rel="stylesheet" href="{% static 'css/home.css' %}">
   <link rel="stylesheet" href="{% static 'css/resume.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .tts-controls {
+      margin: 1.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .tts-btn {
+      background: none;
+      border: none;
+      font-size: 1.6rem;
+      cursor: pointer;
+      color: #007bff;
+      transition: color 0.2s;
+    }
+    .tts-btn:hover { color: #0056b3; }
+    .tts-btn.paused { color: #6c757d; }
+    #ttsStatus {
+      font-size: 0.95rem;
+      color: #555;
+    }
+    #voiceSelect {
+      padding: 0.4rem 0.6rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+  </style>
 </head>
 <body>
   {% include 'partials/nav.html' %}
@@ -15,9 +45,20 @@
     <div class="container">
       <h1>{{ resume.title|default:"Résumé" }}</h1>
       <p class="resume-date">{{ resume.created_at|date:"d/m/Y H:i" }}</p>
-      
+
+      <!-- ========== RÉSUMÉ + CONTRÔLES TTS ========== -->
       <div class="generated-resume">
         {{ resume.content|linebreaks }}
+
+        <div class="tts-controls">
+          <button type="button" id="playTTS" class="tts-btn" title="Écouter le résumé">
+            <i class="fas fa-volume-up"></i>
+          </button>
+          <span id="ttsStatus">Cliquez pour écouter</span>
+          <select id="voiceSelect">
+            <option value="">Voix par défaut</option>
+          </select>
+        </div>
       </div>
 
       <div class="resume-actions">
@@ -28,5 +69,103 @@
   </main>
 
   {% include 'partials/footer.html' %}
+
+  <!-- ============== JAVASCRIPT TTS ============== -->
+ <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('playTTS');
+    const status = document.getElementById('ttsStatus');
+    const voiceSelect = document.getElementById('voiceSelect');
+    let utterance = null;
+    let voices = [];
+
+    // === LOAD ALL VOICES (grouped by language) ===
+    function loadVoices() {
+      voices = speechSynthesis.getVoices();
+      voiceSelect.innerHTML = '<option value="">Voix par défaut</option>';
+      const langGroups = {};
+      voices.forEach((voice, index) => {
+        const lang = voice.lang.split('-')[0];
+        if (!langGroups[lang]) langGroups[lang] = [];
+        langGroups[lang].push({ name: voice.name, index });
+      });
+      Object.keys(langGroups).sort().forEach(lang => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = lang.toUpperCase();
+        langGroups[lang].forEach(v => {
+          const opt = new Option(`${v.name}`, v.index);
+          optgroup.appendChild(opt);
+        });
+        voiceSelect.appendChild(optgroup);
+      });
+    }
+
+    speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    // === SIMPLE LANGUAGE DETECTION FROM TEXT ===
+    const detectLang = (txt) => {
+      const samples = {
+        fr: /[\u00C0-\u017F]/.test(txt) && /je|tu|il|elle|nous|vous|le|la|les|un|une|et|mais|ou|si|car|donc/i.test(txt),
+        en: /[a-z]/.test(txt) && /the|and|to|of|in|for|on|with|at|by|from|is|are|was|were|that|this|it|you|I|he|she|we|they/i.test(txt),
+        es: /[\u00C0-\u017F]/.test(txt) && /el|la|los|las|un|una|de|en|y|pero|porque|si|con|para|por/i.test(txt),
+        de: /[\u00C0-\u017F]/.test(txt) && /der|die|das|und|in|zu|den|von|mit|ist|sind|war|waren|ich|du|er|sie|wir|ihr|sie/i.test(txt),
+        it: /[\u00C0-\u017F]/.test(txt) && /il|la|lo|gli|un|una|di|in|e|ma|per|con|su|del|nel|dal|sul|nel|per|che|non/i.test(txt),
+      };
+      for (const [lang, test] of Object.entries(samples)) {
+        if (test) return lang;
+      }
+      return 'en';
+    };
+
+    btn.addEventListener('click', () => {
+      const text = `{{ resume.content|escapejs }}`.trim();
+
+      if (!text) {
+        status.textContent = "Aucun texte à lire.";
+        return;
+      }
+
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+        status.textContent = "Cliquez pour écouter";
+        btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        return;
+      }
+
+      utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = detectLang(text);  // AUTO-DETECT
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      const selected = voiceSelect.value;
+      if (selected !== "") {
+        utterance.voice = voices[selected];
+      } else {
+        const defaultVoice = voices.find(v => v.lang.startsWith(utterance.lang) && v.default);
+        if (defaultVoice) utterance.voice = defaultVoice;
+      }
+
+      utterance.onstart = () => {
+        status.textContent = "Lecture en cours…";
+        btn.innerHTML = '<i class="fas fa-pause"></i>';
+      };
+
+      utterance.onend = () => {
+        status.textContent = "Terminé ! Cliquez pour réécouter";
+        btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+      };
+
+      utterance.onerror = (e) => {
+        status.textContent = "Erreur de lecture";
+        btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        console.error("TTS Error:", e);
+      };
+
+      speechSynthesis.speak(utterance);
+    });
+  });
+</script>
 </body>
 </html>

@@ -403,6 +403,7 @@ def note_export_json(request):
 
 
 @login_required
+@login_required
 def resume_generate(request):
     form = ResumeGenerateForm(request.POST or None)
     generated_resume = None
@@ -430,19 +431,24 @@ def resume_generate(request):
         if notes_contents:
             summary_text = generate_summary_from_notes(notes_contents)
 
+            # ---- NEW: Create title with date ----
+            title = f"Résumé {period}"
+            if category:
+                title += f" - {category}"
+            title += f" ({now.strftime('%d/%m/%Y')})"
+
             # Sauvegarder le résumé
             generated_resume = Resume.objects.create(
                 author=request.user,
-                title=f"Résumé {period} {category or ''}".strip(),
+                title=title,
                 content=summary_text,
-                notes_ids=[note.id for note in notes]
+                notes_ids=[note.id for note in notes]  # Keep this for future use
             )
 
     return render(request, "resumes/resume_generate.html", {
         "form": form,
         "generated_resume": generated_resume
     })
-
 
 @login_required
 def resume_list(request):
@@ -452,6 +458,13 @@ def resume_list(request):
 
 @login_required
 def resume_detail(request, pk):
-    """Afficher le détail d’un résumé."""
+    """Afficher le détail d'un résumé avec TTS support."""
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
-    return render(request, 'resumes/resume_detail.html', {'resume': resume})
+    
+    context = {
+        'resume': resume,
+        # NEW: Pass notes_ids as JSON for potential future use
+        'notes_ids_json': resume.notes_ids  # Already a list, will be serialized by Django
+    }
+    
+    return render(request, 'resumes/resume_detail.html', context)
