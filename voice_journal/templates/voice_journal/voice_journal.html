@@ -269,7 +269,7 @@
                     <div id="textSentiment" class="result-content"></div>
                 </div>
                 
-                <div class="result-section">
+                <div class="result-section" id="audioEmotionSection" style="display:none">
                     <h3>🎵 Émotion audio</h3>
                     <div id="audioEmotion" class="result-content"></div>
                 </div>
@@ -411,6 +411,8 @@
             }
             
             displayResults(result) {
+                // Show success immediately before any secondary fetches (music)
+                try { this.updateUI('success', '✅ Analyse terminée !'); } catch {}
                 document.getElementById('transcription').textContent = result.transcription;
                 
                 const sentimentClass = result.text_sentiment.toLowerCase();
@@ -420,11 +422,8 @@
                     </span>
                 `;
                 
-                document.getElementById('audioEmotion').innerHTML = `
-                    <span class="emotion-badge">
-                        ${result.audio_emotion} (${result.audio_emotion_score.toFixed(2)})
-                    </span>
-                `;
+                // Hide audio emotion; we rely on text sentiment for UX
+                try { document.getElementById('audioEmotionSection').style.display = 'none'; } catch {}
 
                 // AI message
                 const aiMsgEl = document.getElementById('aiMessage');
@@ -451,10 +450,9 @@
                     hero.style.background = `linear-gradient(180deg, ${result.theme.primary}, ${result.theme.secondary})`;
                 }
 
-                // Music cards
+                // Music cards (render spinner first, then fetch async if needed)
                 const musicList = document.getElementById('musicList');
-                musicList.innerHTML = '';
-                (result.music || []).forEach(item => {
+                const renderCard = (item) => {
                     const card = document.createElement('div');
                     card.style.display = 'grid';
                     card.style.gridTemplateColumns = '160px 1fr';
@@ -464,17 +462,94 @@
                     card.style.border = '1px solid #e5e7eb';
                     card.style.borderRadius = '12px';
 
-                    if (item.embedUrl) {
-                        const iframe = document.createElement('iframe');
-                        iframe.width = '160';
-                        iframe.height = '90';
-                        iframe.src = item.embedUrl;
-                        iframe.title = item.title || 'YouTube player';
-                        iframe.frameBorder = '0';
-                        iframe.referrerPolicy = 'strict-origin-when-cross-origin';
-                        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-                        iframe.allowFullscreen = true;
-                        card.appendChild(iframe);
+                    // If Jamendo audioUrl present, render audio player; else fallback to thumbnail link (avoid iframes that 503/X-Frame-Options)
+                    if (item.audioUrl) {
+                        const audio = document.createElement('audio');
+                        audio.src = item.audioUrl;
+                        audio.controls = true;
+                        audio.preload = 'metadata';
+                        audio.style.width = '160px';
+                        card.appendChild(audio);
+                    }
+
+                    // Lite inline embed: clickable thumbnail swaps to in-page youtube-nocookie iframe (no navigation)
+                    const vidId = item.videoId || (item.embedUrl ? (item.embedUrl.split('/embed/')[1] || '').split('?')[0] : '');
+                    const thumbSrc = item.thumbnail || (vidId ? `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg` : '');
+                    if (vidId) {
+                        const container = document.createElement('div');
+                        container.style.position = 'relative';
+                        container.style.width = '160px';
+                        container.style.height = '90px';
+                        container.style.borderRadius = '8px';
+                        container.style.overflow = 'hidden';
+
+                        const img = document.createElement('img');
+                        img.src = thumbSrc;
+                        img.width = 160;
+                        img.height = 90;
+                        img.style.display = 'block';
+                        img.style.width = '160px';
+                        img.style.height = '90px';
+                        img.style.objectFit = 'cover';
+                        img.alt = item.title || 'Cliquez pour écouter';
+
+                        const overlay = document.createElement('div');
+                        overlay.style.position = 'absolute';
+                        overlay.style.top = '0';
+                        overlay.style.left = '0';
+                        overlay.style.right = '0';
+                        overlay.style.bottom = '0';
+                        overlay.style.display = 'flex';
+                        overlay.style.alignItems = 'center';
+                        overlay.style.justifyContent = 'center';
+                        overlay.style.background = 'rgba(0,0,0,0.15)';
+
+                        const playBtn = document.createElement('div');
+                        playBtn.style.width = '48px';
+                        playBtn.style.height = '36px';
+                        playBtn.style.background = 'rgba(23, 35, 34, 0.9)';
+                        playBtn.style.borderRadius = '10px';
+                        playBtn.style.display = 'flex';
+                        playBtn.style.alignItems = 'center';
+                        playBtn.style.justifyContent = 'center';
+                        playBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>';
+
+                        overlay.appendChild(playBtn);
+                        container.appendChild(img);
+                        container.appendChild(overlay);
+
+                        // On click, swap to iframe (in-page playback)
+                        container.addEventListener('click', () => {
+                            const iframe = document.createElement('iframe');
+                            iframe.width = '160';
+                            iframe.height = '90';
+                            iframe.frameBorder = '0';
+                            iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+                            iframe.allowFullscreen = true;
+                            iframe.referrerPolicy = 'no-referrer-when-downgrade';
+                            const params = 'autoplay=1&controls=1&playsinline=1&modestbranding=1&rel=0';
+                            iframe.src = `https://www.youtube-nocookie.com/embed/${vidId}?${params}`;
+                            container.replaceWith(iframe);
+                        }, { once: true });
+
+                        img.onerror = function () {
+                            const candidates = [
+                                `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`,
+                                `https://i.ytimg.com/vi/${vidId}/sddefault.jpg`,
+                                `https://img.youtube.com/vi/${vidId}/mqdefault.jpg`,
+                                `https://img.youtube.com/vi/${vidId}/maxresdefault.jpg`,
+                                `https://img.youtube.com/vi/${vidId}/default.jpg`
+                            ];
+                            const tried = img.dataset.tried ? img.dataset.tried.split('|') : [];
+                            const next = candidates.find(u => !tried.includes(u));
+                            if (next) {
+                                tried.push(next);
+                                img.dataset.tried = tried.join('|');
+                                img.src = next;
+                            }
+                        };
+
+                        card.appendChild(container);
                     } else {
                         const ph = document.createElement('div');
                         ph.style.width = '160px';
@@ -494,7 +569,34 @@
                     card.appendChild(meta);
 
                     musicList.appendChild(card);
-                });
+                };
+
+                musicList.innerHTML = '';
+                const initial = Array.isArray(result.music) ? result.music : [];
+                if (initial.length) {
+                    initial.forEach(renderCard);
+                } else {
+                    // show spinner and fetch asynchronously
+                    const spinner = document.createElement('div');
+                    spinner.textContent = 'Chargement des recommandations…';
+                    spinner.style.color = '#64748b';
+                    spinner.style.fontStyle = 'italic';
+                    musicList.appendChild(spinner);
+                    const startFetch = () => {
+                        try {
+                            fetch('/voice-journal/api/music/', {
+                                method: 'POST',
+                                body: new URLSearchParams({ mood: result.emotion || 'neutral' }),
+                                headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                            }).then(r => r.json()).then(data => {
+                                musicList.innerHTML = '';
+                                (data.music || []).forEach(renderCard);
+                            }).catch(() => { spinner.textContent = 'Aucune recommandation trouvée.'; });
+                        } catch { spinner.textContent = 'Aucune recommandation trouvée.'; }
+                    };
+                    // Defer network call to let the UI paint the success state first
+                    if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(startFetch, 0)); else setTimeout(startFetch, 0);
+                }
                 
                 this.results.style.display = 'block';
                 
@@ -596,8 +698,8 @@
                     agentRecorder.start(300);
 
                     let silentMs = 0;
-                    const threshold = 8; // Seuil plus sensible pour détecter le silence
-                    const minSpeechMs = 800; // Plus de temps minimum avant de pouvoir détecter le silence
+                    const threshold = 10; // Légèrement moins sensible au faux silence
+                    const minSpeechMs = 1200; // Attendre plus longtemps avant d'autoriser la détection de fin
                     let totalMs = 0;
                     const intervalMs = 100;
                     const tick = async () => {
@@ -624,14 +726,20 @@
                                                currentReply.includes('oui/non') ||
                                                currentReply.includes('ou pas');
                         
-                        // Réduire le délai de silence pour les réponses musicales
-                        const silenceThreshold = isMusicResponse ? 1000 : 2500; // 1s pour musique, 2.5s pour le reste
+                        // Réduire le délai de silence pour répondre plus vite
+                        const isQuickResponse = isMusicResponse || 
+                                               currentReply.includes('dis-moi') ||
+                                               currentReply.includes('veux-tu') ||
+                                               currentReply.includes('souhaites-tu') ||
+                                               currentReply.includes('besoin d\'autre chose');
+                        
+                        const silenceThreshold = isQuickResponse ? 1400 : 2600; // 1.4s pour réponses rapides, 2.6s sinon
                         
                         if (silentMs >= silenceThreshold) {
                             // Délai supplémentaire pour s'assurer que l'utilisateur a terminé
                             statusEl.textContent = 'Traitement… (attendez)';
-                            
-                            const delay = isMusicResponse ? 100 : 500; // Délai très réduit pour les réponses musicales
+
+                            const delay = isQuickResponse ? 250 : 500; // Légère marge avant de couper
                             setTimeout(async () => {
                                 await finalizeTurn();
                             }, delay);
@@ -731,43 +839,110 @@
                     // Render optional music preview and manage flow
                     const pv = document.getElementById('agentPreview');
                     const hadPreview = !!pv.dataset.currentEmbed;
-                    if (data.preview && data.preview.embedUrl) {
+                    if (data.preview && (data.preview.embedUrl || data.preview.audioUrl)) {
                         // Keep preview visible and reusable; only replace if new
-                        if (pv.dataset.currentEmbed !== data.preview.embedUrl) {
+                        const currentKey = data.preview.audioUrl || data.preview.embedUrl;
+                        if (pv.dataset.currentEmbed !== currentKey) {
                             pv.innerHTML = '';
-                            const iframe = document.createElement('iframe');
-                            iframe.width = '280';
-                            iframe.height = '158';
-                            iframe.src = data.preview.embedUrl;
-                            iframe.frameBorder = '0';
-                            iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-                            iframe.allowFullscreen = true;
-                            pv.appendChild(iframe);
-                            // Add a small clickable link below
-                            const link = document.createElement('a');
-                            link.href = data.preview.embedUrl.replace('youtube-nocookie.com/embed/', 'youtube.com/watch?v=');
-                            link.target = '_blank';
-                            link.rel = 'noopener noreferrer';
-                            link.textContent = 'Ouvrir sur YouTube';
-                            link.style.display = 'block';
-                            link.style.marginTop = '6px';
-                            pv.appendChild(link);
-                            pv.dataset.currentEmbed = data.preview.embedUrl;
+                            // Try audio first if present; else prepare youtube data
+                            const previewUrl = data.preview.embedUrl || '';
+                            const vidId = previewUrl ? (previewUrl.split('/embed/')[1] || '').split('?')[0] : '';
+                            const thumbSrc = vidId ? `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg` : '';
+                            const watchUrl = vidId ? `https://www.youtube.com/watch?v=${vidId}` : previewUrl;
+
+                            if (vidId) {
+                                // Same UX as recommendations: click-to-play thumbnail swaps to in-page embed, then 15s timer
+                                const container = document.createElement('div');
+                                container.style.position = 'relative';
+                                container.style.width = '280px';
+                                container.style.height = '158px';
+                                container.style.borderRadius = '8px';
+                                container.style.overflow = 'hidden';
+
+                                const img = document.createElement('img');
+                                img.src = thumbSrc;
+                                img.width = 280;
+                                img.height = 158;
+                                img.style.display = 'block';
+                                img.style.width = '280px';
+                                img.style.height = '158px';
+                                img.style.objectFit = 'cover';
+                                img.alt = data.preview.title || 'Cliquez pour écouter';
+
+                                const overlay = document.createElement('div');
+                                overlay.style.position = 'absolute';
+                                overlay.style.top = '0';
+                                overlay.style.left = '0';
+                                overlay.style.right = '0';
+                                overlay.style.bottom = '0';
+                                overlay.style.display = 'flex';
+                                overlay.style.alignItems = 'center';
+                                overlay.style.justifyContent = 'center';
+                                overlay.style.background = 'rgba(0,0,0,0.15)';
+
+                                const playBtn = document.createElement('div');
+                                playBtn.style.width = '68px';
+                                playBtn.style.height = '48px';
+                                playBtn.style.background = 'rgba(23, 35, 34, 0.9)';
+                                playBtn.style.borderRadius = '14px';
+                                playBtn.style.display = 'flex';
+                                playBtn.style.alignItems = 'center';
+                                playBtn.style.justifyContent = 'center';
+                                playBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>';
+
+                                overlay.appendChild(playBtn);
+                                container.appendChild(img);
+                                container.appendChild(overlay);
+                                // Autoplay inline without click (muted for autoplay policies)
+                                const iframe = document.createElement('iframe');
+                                iframe.width = '280';
+                                iframe.height = '158';
+                                iframe.frameBorder = '0';
+                                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+                                iframe.allowFullscreen = true;
+                                iframe.referrerPolicy = 'no-referrer-when-downgrade';
+                                let src = previewUrl && previewUrl.includes('youtube') ? previewUrl : `https://www.youtube-nocookie.com/embed/${vidId}`;
+                                const joiner = src.includes('?') ? '&' : '?';
+                                if (!/([?&])start=/.test(src)) src += `${joiner}start=0`;
+                                if (!/([?&])end=/.test(src)) src += `${src.includes('?') ? '&' : '?'}end=15`;
+                                if (!/([?&])autoplay=/.test(src)) src += `${src.includes('?') ? '&' : '?'}autoplay=1`;
+                                if (!/([?&])playsinline=/.test(src)) src += `${src.includes('?') ? '&' : '?'}playsinline=1`;
+                                if (!/([?&])controls=/.test(src)) src += `${src.includes('?') ? '&' : '?'}controls=1`;
+                                if (!/([?&])enablejsapi=/.test(src)) src += `${src.includes('?') ? '&' : '?'}enablejsapi=1`;
+                                if (!/([?&])origin=/.test(src)) src += `${src.includes('?') ? '&' : '?'}origin=${encodeURIComponent(location.origin)}`;
+                                iframe.src = src.replace('https://www.youtube.com/embed/', 'https://www.youtube-nocookie.com/embed/');
+                                pv.appendChild(iframe);
+                                statusEl.textContent = 'Extrait en cours…';
+                                // Try to unmute and set volume once player is ready
+                                try {
+                                    const unmute = () => {
+                                        try {
+                                            iframe.contentWindow && iframe.contentWindow.postMessage(JSON.stringify({
+                                                event: 'command',
+                                                func: 'unMute',
+                                                args: []
+                                            }), '*');
+                                            iframe.contentWindow && iframe.contentWindow.postMessage(JSON.stringify({
+                                                event: 'command',
+                                                func: 'setVolume',
+                                                args: [100]
+                                            }), '*');
+                                        } catch {}
+                                    };
+                                    iframe.addEventListener('load', () => setTimeout(unmute, 300));
+                                    setTimeout(unmute, 1200);
+                                } catch {}
+                                setTimeout(() => {
+                                    if (!inCall) return;
+                                    statusEl.textContent = 'Assistant parle…';
+                                    speakText('Tu aimes ou pas ?', '', () => { if (inCall) beginListening(); });
+                                }, 15500);
+                            }
+
+                            pv.dataset.currentEmbed = currentKey;
                         }
-                        // During preview, wait for video to finish, then ask for feedback
-                        statusEl.textContent = "Extrait en cours…";
                         if (data.end_call) {
                             stopCall();
-                        } else {
-                            // Attendre que l'extrait se termine, puis demander l'avis rapidement
-                            setTimeout(() => { 
-                                if (inCall) {
-                                    statusEl.textContent = 'Assistant parle…';
-                                    speakText("Tu aimes ou pas ?", '', () => {
-                                        if (inCall) beginListening();
-                                    });
-                                }
-                            }, 8000); // 8 secondes pour l'extrait, puis question immédiate
                         }
                     } else {
                         // No preview; proceed with TTS + normal loop
@@ -796,28 +971,59 @@
                     if (mood === 'sad') utter.rate = 0.95;
                     if (mood === 'stressed') utter.rate = 0.98;
                     window.speechSynthesis.cancel();
-                    utter.onend = () => { if (typeof onend === 'function') onend(); };
-                    window.speechSynthesis.speak(utter);
                     
-                    // Détecter les instructions de respiration et démarrer l'animation
+                    // Détecter les instructions de respiration AVANT de parler
+                    let breathingAnimationType = null;
+                    let breathingDuration = 0;
                     if (text && typeof text === 'string') {
                         const breathingText = text.toLowerCase();
-                        if (breathingText.includes('respir') || breathingText.includes('commence') || breathingText.includes('exercice')) {
-                            // Démarrer l'animation dès que l'assistant commence l'exercice
+                        
+                        // Masquer l'animation si l'exercice est terminé
+                        if (breathingText.includes('très bien') || 
+                            breathingText.includes('refait') || 
+                            breathingText.includes('besoin d\'autre chose') ||
+                            breathingText.includes('souhaites-tu refaire')) {
                             setTimeout(() => {
-                                startBreathingAnimation(text);
-                            }, 1000); // Attendre 1 seconde que l'assistant commence à parler
+                                const animationEl = document.getElementById('breathingAnimation');
+                                animationEl.style.display = 'none';
+                                breathingStepCount = 0;
+                            }, 1000);
+                        }
+                        // Détecter "Inspire 4 secondes"
+                        else if (breathingText.includes('inspire 4')) {
+                            breathingAnimationType = 'inspire';
+                            breathingDuration = 4;
+                        }
+                        // Détecter "Bloque 4 secondes"
+                        else if (breathingText.includes('bloque 4')) {
+                            breathingAnimationType = 'hold';
+                            breathingDuration = 4;
+                        }
+                        // Détecter "Expire 6 secondes"
+                        else if (breathingText.includes('expire') && breathingText.includes('6')) {
+                            breathingAnimationType = 'expire';
+                            breathingDuration = 6;
                         }
                     }
+                    
+                    // Créer le callback qui gère à la fois onend et l'animation
+                    utter.onend = () => { 
+                        if (typeof onend === 'function') onend();
+                        // Déclencher l'animation après que l'AI termine de parler
+                        if (breathingAnimationType) {
+                            triggerBreathingStep(breathingAnimationType, breathingDuration);
+                        }
+                    };
+                    
+                    window.speechSynthesis.speak(utter);
                 } catch {}
             }
             
             // Animation de respiration avec gestion des étapes
-            let breathingSteps = [];
-            let currentStep = 0;
+            let breathingStepCount = 0;
             let breathingInterval = null;
             
-            function startBreathingAnimation(instruction) {
+            function triggerBreathingStep(type, duration) {
                 const animationEl = document.getElementById('breathingAnimation');
                 const stepEl = document.getElementById('stepText');
                 const timerEl = document.getElementById('timerText');
@@ -825,67 +1031,51 @@
                 const instructionEl = document.getElementById('instructionText');
                 const visualEl = document.getElementById('breathingVisual');
                 
+                // Afficher l'animation si ce n'est pas déjà fait
                 animationEl.style.display = 'block';
                 
-                // Définir toutes les étapes de respiration
-                breathingSteps = [
-                    { text: 'Inspirez pendant 4 secondes', duration: 4, style: 'inspire', step: 1 },
-                    { text: 'Bloquez pendant 4 secondes', duration: 4, style: 'hold', step: 2 },
-                    { text: 'Expirez pendant 6 secondes', duration: 6, style: 'expire', step: 3 }
-                ];
-                
-                currentStep = 0;
-                runBreathingStep();
-            }
-            
-            function runBreathingStep() {
-                if (currentStep >= breathingSteps.length) {
-                    // Fin de l'exercice
-                    const animationEl = document.getElementById('breathingAnimation');
-                    const timerEl = document.getElementById('timerText');
-                    const progressEl = document.getElementById('progressBar');
-                    const instructionEl = document.getElementById('instructionText');
-                    const visualEl = document.getElementById('breathingVisual');
-                    const stepEl = document.getElementById('stepText');
-                    
-                    timerEl.textContent = '✓ Terminé';
-                    progressEl.style.width = '100%';
-                    instructionEl.textContent = 'Exercice terminé !';
-                    stepEl.textContent = 'Exercice complet';
-                    visualEl.style.background = '#10B981';
-                    visualEl.style.transform = 'scale(1.2)';
-                    
-                    // Masquer l'animation après 3 secondes
-                    setTimeout(() => {
-                        animationEl.style.display = 'none';
-                    }, 3000);
-                    return;
+                // Arrêter toute animation en cours
+                if (breathingInterval) {
+                    clearInterval(breathingInterval);
+                    breathingInterval = null;
                 }
                 
-                const step = breathingSteps[currentStep];
-                const timerEl = document.getElementById('timerText');
-                const progressEl = document.getElementById('progressBar');
-                const instructionEl = document.getElementById('instructionText');
-                const visualEl = document.getElementById('breathingVisual');
-                const stepEl = document.getElementById('stepText');
+                // Définir le texte et le style selon le type
+                let text, style, stepNum;
+                if (type === 'inspire') {
+                    text = 'Inspirez pendant 4 secondes';
+                    style = 'inspire';
+                    stepNum = 1;
+                    breathingStepCount = 1;  // Première vraie étape
+                } else if (type === 'hold') {
+                    text = 'Bloquez pendant 4 secondes';
+                    style = 'hold';
+                    stepNum = 2;
+                    breathingStepCount = 2;  // Deuxième étape
+                } else if (type === 'expire') {
+                    text = 'Expirez pendant 6 secondes';
+                    style = 'expire';
+                    stepNum = 3;
+                    breathingStepCount = 3;  // Troisième étape
+                }
                 
                 // Mettre à jour l'interface
-                stepEl.textContent = `Étape ${step.step}/3`;
-                instructionEl.textContent = step.text;
-                timerEl.textContent = step.duration;
+                stepEl.textContent = `Étape ${stepNum}/3`;
+                instructionEl.textContent = text;
+                timerEl.textContent = duration;
                 progressEl.style.width = '0%';
                 
                 // Animation visuelle selon le type
-                updateVisualStyle(visualEl, step.style);
+                updateVisualStyle(visualEl, style);
                 
-                let timeLeft = step.duration;
+                let timeLeft = duration;
                 
                 breathingInterval = setInterval(() => {
                     timeLeft--;
                     timerEl.textContent = timeLeft;
                     
                     // Mettre à jour la barre de progression
-                    const progress = ((step.duration - timeLeft) / step.duration) * 100;
+                    const progress = ((duration - timeLeft) / duration) * 100;
                     progressEl.style.width = progress + '%';
                     
                     // Animation du cercle
@@ -897,19 +1087,77 @@
                         timerEl.textContent = '✓';
                         progressEl.style.width = '100%';
                         visualEl.style.transform = 'scale(1)';
+                        breathingInterval = null;
                         
-                        // Passer à l'étape suivante après 1 seconde
+                        // Si ce n'est pas la dernière étape, récupérer automatiquement l'étape suivante
+                        if (breathingStepCount < 3 && inCall) {
+                            // Petit délai pour que l'utilisateur voie le ✓
                         setTimeout(() => {
-                            currentStep++;
-                            runBreathingStep();
-                        }, 1000);
+                                requestNextBreathingStep();
+                            }, 300);
+                        }
                     }
                 }, 1000);
             }
             
-            function extractDuration(text) {
-                const match = text.match(/(\d+)\s*secondes?/);
-                return match ? parseInt(match[1]) : null;
+            async function requestNextBreathingStep() {
+                // Envoyer une requête vide au serveur pour obtenir l'étape suivante
+                try {
+                    const fd = new FormData();
+                    fd.append('audio', new Blob(), 'empty.webm');
+                    const supportCard = document.getElementById('supportCard');
+                    const mood = supportCard?.dataset?.mood || '';
+                    if (mood) fd.append('mood', mood);
+                    
+                    const res = await fetch('/voice-journal/api/voice-agent-turn/', {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '') }
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        const replyEl = document.getElementById('agentReply');
+                        replyEl.textContent = data.reply_text || '';
+                        statusEl.textContent = 'Assistant parle…';
+                        
+                        const replyText = replyEl.textContent.toLowerCase();
+                        
+                        // Si le texte contient "Très bien" ou "refait", on a terminé l'exercice
+                        if (replyText.includes('très bien') || replyText.includes('refait') || replyText.includes('besoin d\'autre chose')) {
+                            // Attendre que l'utilisateur réponde avant de commencer à écouter
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                if (data.end_call) {
+                                    stopCall();
+                                } else {
+                                    // Laisser un petit délai puis commencer à écouter
+                                    setTimeout(() => {
+                                        if (inCall) beginListening();
+                                    }, 500);
+                                }
+                            });
+                        } 
+                        // Si c'est l'introduction "commence une respiration", obtenir la prochaine étape immédiatement
+                        else if (replyText.includes('commence une respiration')) {
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                // Attendre un instant puis obtenir l'étape suivante (Inspire 4 secondes)
+                                setTimeout(() => {
+                                    requestNextBreathingStep();
+                                }, 300);
+                            });
+                        }
+                        // C'est une instruction de respiration, démarrer l'animation après que l'AI parle
+                        else {
+                            speakText(replyEl.textContent, (data.mood || ''), () => {
+                                if (data.end_call) {
+                                    stopCall();
+                                }
+                                // Ne pas appeler beginListening - l'animation sera déclenchée automatiquement
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.log('Erreur lors de la récupération de l\'étape suivante:', e);
+                }
             }
             
             function updateVisualStyle(element, style) {
@@ -941,6 +1189,7 @@
                 try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
                 try { if (breathingInterval) { clearInterval(breathingInterval); breathingInterval = null; } } catch {}
                 try { document.getElementById('breathingAnimation').style.display = 'none'; } catch {}
+                breathingStepCount = 0; // Reset breathing step counter
                 talkBtn.disabled = false;
                 stopBtn.disabled = true;
                 statusEl.textContent = '';

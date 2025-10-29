@@ -30,6 +30,40 @@
             color: #475467;
             margin: 0 0 32px;
         }
+
+        /* Stats */
+        .stats-section {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin: 16px 0 24px;
+            box-shadow: var(--shadow-sm);
+        }
+        .stats-grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+        .stat-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .stat-title { font-size: 13px; color: #64748b; font-weight: 700; margin-bottom: 6px; }
+        .stat-value { font-size: 20px; font-weight: 800; color: #0f172a; }
+        .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-weight:700; font-size:12px; margin-right:6px; }
+        .badge-pos { background:#dcfce7; color:#166534; }
+        .badge-neg { background:#fee2e2; color:#991b1b; }
+        .badge-neu { background:#f3f4f6; color:#374151; }
+        .timeline { display:flex; gap:6px; align-items:flex-end; height:56px; margin-top:8px; }
+        .timeline-bar { width: 12%; min-width: 10px; border-radius:6px; opacity:0.9; }
+        .bar-pos { background:#bbf7d0; border:1px solid #86efac; }
+        .bar-neu { background:#e5e7eb; border:1px solid #d1d5db; }
+        .bar-neg { background:#fecaca; border:1px solid #fca5a5; }
+        .timeline-labels { display:flex; gap:6px; justify-content:space-between; margin-top:6px; color:#64748b; font-size:11px; }
+        .mini-legend { display:flex; gap:10px; color:#64748b; font-size:12px; margin-top:4px }
+        .mini-legend i { width:10px;height:10px;display:inline-block;border-radius:2px }
+        .i-pos{background:#16a34a} .i-neu{background:#6b7280} .i-neg{background:#dc2626}
+        .pie { width:120px; height:120px; border-radius:50%; margin:6px auto 8px; border:6px solid #fff; box-shadow:0 1px 2px rgba(0,0,0,0.06); }
+        .pie-legend { display:flex; gap:10px; justify-content:center; color:#64748b; font-size:12px }
         
         .voice-entries-grid {
             display: grid;
@@ -62,6 +96,13 @@
             color: #667085;
             font-size: 14px;
             font-weight: 600;
+        }
+
+        .voice-entry-title {
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 4px;
         }
         
         .voice-entry-actions {
@@ -338,6 +379,93 @@
         </section>
 
         <section class="container">
+            <!-- Stats -->
+            <div class="stats-section">
+                <div class="stats-grid">
+                    <!-- Résumé global -->
+                    <div class="stat-card">
+                        <div class="stat-title">Résumé global</div>
+                        <div class="stat-value">{{ stats_total }} notes</div>
+                        <div style="margin-top:6px">
+                            <span class="badge badge-pos">🙂 {{ stats_sentiments.POSITIVE|default:0 }}</span>
+                            <span class="badge badge-neu">😐 {{ stats_sentiments.NEUTRAL|default:0 }}</span>
+                            <span class="badge badge-neg">🙁 {{ stats_sentiments.NEGATIVE|default:0 }}</span>
+                        </div>
+                        <div style="margin-top:10px;color:#475467;font-size:14px">
+                            {% with d=stats_week_summary.dominant e=stats_week_summary.emoji %}
+                                {% if d == 'POSITIVE' %}
+                                    Semaine plutôt positive {{ e }}{% if stats_peak_positive_day %} (pic le {{ stats_peak_positive_day|date:"d" }}){% endif %}.
+                                {% elif d == 'NEGATIVE' %}
+                                    Semaine plutôt négative {{ e }}{% if stats_peak_negative_day %} (pic négatif le {{ stats_peak_negative_day|date:"d" }}){% endif %}.
+                                {% else %}
+                                    Semaine plutôt neutre {{ e }}{% if stats_peak_total_day %} (jour le plus actif: {{ stats_peak_total_day|date:"d" }}){% endif %}.
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <!-- Activité (7 jours): bar chart horizontal + line chart -->
+                    <div class="stat-card">
+                        <div class="stat-title">Activité (7 jours)</div>
+                        <div>
+                            {% for d in stats_per_day_bars %}
+                                <div style="display:grid;grid-template-columns:24px 1fr;align-items:center;gap:8px;margin:6px 0">
+                                    <div style="color:#64748b;font-size:12px;text-align:center">{{ d.label }}</div>
+                                    <div style="display:flex;align-items:center;gap:8px">
+                                        <div class="bar-{{ d.cls }} js-bar" data-w="{{ d.width }}" style="height:10px;border-radius:999px"></div>
+                                        <span style="color:#94a3b8;font-size:12px">{{ d.dominant|title }}</span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div style="margin-top:10px">
+                            <svg viewBox="0 0 210 50" width="100%" height="60" preserveAspectRatio="none" style="background:linear-gradient(180deg,#ffffff,#fafafa)">
+                                <polyline points="{{ stats_mood_line_points }}" fill="none" stroke="#3b82f6" stroke-width="2" />
+                            </svg>
+                            <div class="mini-legend">
+                                <span style="display:inline-flex;align-items:center;gap:6px"><i class="i-pos"></i> Positif</span>
+                                <span style="display:inline-flex;align-items:center;gap:6px"><i class="i-neu"></i> Neutre</span>
+                                <span style="display:inline-flex;align-items:center;gap:6px"><i class="i-neg"></i> Négatif</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Répartition (Pie chart) -->
+                    <div class="stat-card" style="text-align:center">
+                        <div class="stat-title">Répartition des sentiments</div>
+                        <div class="pie" id="pieChart" data-pos="{{ stats_pie_pct.positive }}" data-neu="{{ stats_pie_pct.neutral }}"></div>
+                        <div class="pie-legend">
+                            <span>🙂 {{ stats_pie_pct.positive }}%</span>
+                            <span>😐 {{ stats_pie_pct.neutral }}%</span>
+                            <span>🙁 {{ stats_pie_pct.negative }}%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+            (function(){
+                // Build pie chart background from data attributes to avoid template syntax in CSS
+                try {
+                    var el = document.getElementById('pieChart');
+                    if (el) {
+                        var p = parseInt(el.getAttribute('data-pos')||'0',10);
+                        var n = parseInt(el.getAttribute('data-neu')||'0',10);
+                        var pn = p + n; if (isNaN(pn)) pn = 0;
+                        el.style.background = 'conic-gradient('+
+                            '#16a34a 0% '+ p + '%, ' +
+                            '#6b7280 ' + p + '% ' + pn + '%, ' +
+                            '#dc2626 ' + pn + '% 100%)';
+                    }
+                    // Apply widths to bars from data-w
+                    var bars = document.querySelectorAll('.js-bar');
+                    bars.forEach(function(b){
+                        var w = parseInt(b.getAttribute('data-w')||'0',10);
+                        if (!isNaN(w)) b.style.width = Math.max(0, Math.min(100, w)) + '%';
+                    });
+                } catch(e) {}
+            })();
+            </script>
+
             <!-- Filtres et recherche -->
             <div class="filters-section">
                 <form method="GET" class="filters-form">
@@ -346,7 +474,7 @@
                         <div class="filter-group">
                             <label for="search">🔍 Recherche</label>
                             <input type="text" id="search" name="search" value="{{ search_query }}" 
-                                   placeholder="Rechercher dans les transcriptions..." class="search-input">
+                                   placeholder="Rechercher par titre ou transcription..." class="search-input">
                         </div>
                         
                         <!-- Filtre par sentiment -->
@@ -435,6 +563,9 @@
                         <div class="voice-entry-header">
                             <div class="voice-entry-date">
                                 {{ entry.created_at|date:"d F Y à H:i" }}
+                                {% if entry.title %}
+                                <div class="voice-entry-title">{{ entry.title }}</div>
+                                {% endif %}
                             </div>
                             <div class="voice-entry-actions">
                                 <a href="{% url 'voice_journal_detail' entry.pk %}" class="action-btn view">Voir</a>
@@ -497,5 +628,6 @@
     </main>
 
     {% include 'partials/footer.html' %}
+    
 </body>
 </html>

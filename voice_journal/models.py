@@ -43,6 +43,13 @@ class VoiceJournal(models.Model):
         default=0.0,
         help_text="Confidence score for emotion detection"
     )
+
+    title = models.CharField(
+        max_length=120,
+        blank=True,
+        default='',
+        help_text="Custom title for the voice entry"
+    )
     
     created_at = models.DateTimeField(
         default=timezone.now,

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Générer un Résumé – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+  <style>
+    :root {
+      --color-primary: #4A90E2;
+      --color-secondary: #50E3C2;
+      --color-accent: #F5A623;
+      --color-danger: #e74c3c;
+      --color-bg: #F9FAFB;
+      --color-card: #ffffff;
+      --color-text: #333333;
+      --color-muted: #667085;
+      --color-border: #eef0f4;
+    }
+
+    .note-form-container { padding: 2rem 0; }
+    .breadcrumb { margin-bottom: 1.5rem; }
+    .breadcrumb-link {
+      color: var(--color-primary); text-decoration: none; font-size: 0.95rem;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .breadcrumb-link:hover { text-decoration: underline; }
+
+    .form-card {
+      background: var(--color-card); border-radius: 16px; padding: 2rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid var(--color-border);
+      max-width: 800px; margin: 0 auto;
+    }
+    .form-header { text-align: center; margin-bottom: 2rem; }
+    .form-title { font-size: 1.8rem; font-weight: 700; color: var(--color-text); margin: 0 0 0.5rem; }
+    .form-subtitle { color: var(--color-muted); font-size: 1rem; margin: 0; }
+
+    .form-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .form-group { flex: 1; min-width: 250px; }
+    .form-label {
+      display: block; font-weight: 600; margin-bottom: 0.5rem;
+      color: var(--color-text); font-size: 0.95rem;
+    }
+    .form-optional { font-weight: 400; color: var(--color-muted); font-size: 0.85rem; }
+
+    .form-select {
+      width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--color-border);
+      border-radius: 10px; font-size: 1rem; background: white; transition: all 0.2s;
+    }
+    .form-select:focus {
+      outline: none; border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+    }
+
+    .form-actions {
+      display: flex; gap: 1rem; justify-content: center;
+      margin: 2rem 0 1.5rem; flex-wrap: wrap;
+    }
+    .btn-submit {
+      background: var(--color-primary); color: white; padding: 0.75rem 1.8rem;
+      border: none; border-radius: 12px; font-size: 1rem; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 0.6rem;
+      transition: all 0.2s; box-shadow: 0 4px 12px rgba(74, 144, 226, 0.25);
+    }
+    .btn-submit:hover {
+      background: #3a7bc8; transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(74, 144, 226, 0.3);
+    }
+    .btn-submit:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+
+    .ai-info-box {
+      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      border-radius: 14px; padding: 1.5rem; margin: 2rem 0;
+      display: flex; gap: 1rem; border: 1px solid #90caf9; flex-wrap: wrap;
+    }
+    .ai-info-icon { font-size: 2rem; color: var(--color-primary); }
+    .ai-info-content { flex: 1; }
+    .ai-info-title {
+      font-size: 1.1rem; font-weight: 600; color: var(--color-primary);
+      margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .ai-info-text { margin: 0 0 0.75rem; color: #1565c0; font-size: 0.95rem; }
+    .ai-info-list { margin: 0 0 0.75rem; padding-left: 1.2rem; color: #1976d2; font-size: 0.9rem; }
+    .ai-info-list li { margin-bottom: 0.4rem; }
+    .ai-info-note { font-size: 0.85rem; color: #0d47a1; margin: 0; font-weight: 500; }
+
+    .ai-preview-section {
+      background: #f8f9fa; border-radius: 14px; padding: 1.5rem;
+      margin-top: 2rem; border: 1px solid var(--color-border);
+    }
+    .ai-preview-title {
+      font-size: 1.3rem; font-weight: 700; color: var(--color-primary);
+      margin: 0 0 1rem; text-align: center; display: flex;
+      align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    .ai-preview-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1rem; }
+    @media (min-width: 600px) { .ai-preview-grid { grid-template-columns: 1fr 1fr; } }
+    .ai-preview-item { display: flex; flex-direction: column; }
+    .ai-preview-label { font-weight: 600; color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .ai-preview-value {
+      background: white; padding: 0.75rem; border-radius: 8px;
+      border: 1px solid var(--color-border); font-size: 0.95rem; color: var(--color-text);
+    }
+
+    .form-errors {
+      background: #ffebee; color: #c62828; padding: 1rem; border-radius: 10px;
+      border: 1px solid #ffcdd2; margin-bottom: 1.5rem;
+    }
+    .btn-primary, .btn-secondary {
+      padding: 0.75rem 1.5rem; border-radius: 12px; text-decoration: none; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .btn-primary { background: var(--color-primary); color: white; }
+    .btn-primary:hover { background: #3a7bc8; }
+    .btn-secondary { background: #6c757d; color: white; }
+    .btn-secondary:hover { background: #5a6268; }
+  </style>
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="note-form-container">
+    <div class="container">
+      <nav class="breadcrumb">
+        <a href="{% url 'resume_list' %}" class="breadcrumb-link">
+          Retour aux résumés
+        </a>
+      </nav>
+
+      <div class="form-card">
+        <div class="form-header">
+          <h1 class="form-title">Générer un Résumé</h1>
+          <p class="form-subtitle">
+            Laissez l'IA analyser vos notes et créer un résumé intelligent automatiquement
+          </p>
+        </div>
+
+        <form method="post" id="resumeForm">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="form-errors">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">
+                {{ form.period.label }}
+                <span class="form-optional">(optionnel)</span>
+              </label>
+              {{ form.period }}
+              {% if form.period.errors %}
+                <p class="text-danger">{{ form.period.errors }}</p>
+              {% endif %}
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                {{ form.category.label }}
+                <span class="form-optional">(optionnel)</span>
+              </label>
+              {{ form.category }}
+              {% if form.category.errors %}
+                <p class="text-danger">{{ form.category.errors }}</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-submit">
+              Générer le résumé
+            </button>
+          </div>
+
+          <div class="ai-info-box">
+            <div class="ai-info-icon"><i class="fas fa-brain"></i></div>
+            <div class="ai-info-content">
+              <h4 class="ai-info-title"><i class="fas fa-magic"></i> Génération IA du résumé</h4>
+              <p class="ai-info-text">
+                Notre intelligence artificielle analyse automatiquement vos notes pour créer un résumé intelligent :
+              </p>
+              <ul class="ai-info-list">
+                <li><strong>Analyse de contenu</strong> : Extraction des idées principales</li>
+                <li><strong>Filtrage intelligent</strong> : Par période et/ou catégorie</li>
+                <li><strong>Titre automatique</strong> : Généré selon le sentiment dominant</li>
+                <li><strong>Résumé cohérent</strong> : Texte fluide en quelques secondes</li>
+              </ul>
+              <p class="ai-info-note">
+                <strong>Astuce :</strong> Laissez les champs vides pour tout analyser !<br>
+                <strong>Temps :</strong> Moins de 5 secondes
+              </p>
+            </div>
+          </div>
+        </form>
+
+        {% if generated_resume %}
+          <div class="ai-preview-section">
+            <h3 class="ai-preview-title">Résumé généré avec succès !</h3>
+            <div class="ai-preview-grid">
+              <div class="ai-preview-item">
+                <span class="ai-preview-label">Titre :</span>
+                <span class="ai-preview-value">{{ generated_resume.title|default:"Résumé sans titre" }}</span>
+              </div>
+              <div class="ai-preview-item">
+                <span class="ai-preview-label">Aperçu :</span>
+                <span class="ai-preview-value">{{ generated_resume.content|truncatewords:30 }}</span>
+              </div>
+            </div>
+            <div class="form-actions" style="margin-top: 1rem;">
+              <a href="{% url 'resume_detail' generated_resume.pk %}" class="btn-primary">
+                Voir le résumé complet
+              </a>
+              <a href="{% url 'resume_list' %}" class="btn-secondary">
+                Tous les résumés
+              </a>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script>
+    document.getElementById('resumeForm').addEventListener('submit', function() {
+      const btn = this.querySelector('.btn-submit');
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
+      btn.disabled = true;
+    });
+  </script>
+</body>
+</html>

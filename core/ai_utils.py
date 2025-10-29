@@ -2,15 +2,25 @@
 AI utilities for note analysis using Hugging Face transformers.
 Includes sentiment analysis, category classification, and tag generation.
 """
-
+import base64
 from transformers import pipeline
 import logging
+from .models import Reminder
+from django.utils import timezone
+from datetime import timedelta
+from io import BytesIO
+from gtts import gTTS
+from langdetect import detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
+from typing import List, Dict, Any
+import torch
 
 logger = logging.getLogger(__name__)
-
+DetectorFactory.seed = 0
 # Global pipelines (loaded once for performance)
 _sentiment_pipeline = None
 _zero_shot_pipeline = None
+_summarizer = None
 
 
 def get_sentiment_pipeline():
@@ -249,3 +259,146 @@ def analyze_note(text):
         'suggested_mood': suggested_mood
     }
 
+def create_reminder_from_analysis(note, analysis):
+  
+    try:
+        sentiment = analysis.get('sentiment', {})
+        category = analysis.get('category', {})
+        tags = analysis.get('tags', [])
+        mood = analysis.get('suggested_mood', '')
+
+        priority = 'basse'
+        delay_hours = 24
+
+        # 1. Sentiment négatif
+        sentiment_label = sentiment.get('label', '').lower()
+        if 'négatif' in sentiment_label:
+            priority = 'haute'
+            delay_hours = 1
+
+        # 2. Catégorie santé ou travail
+        cat = category.get('category', '').lower()
+        if cat in ['santé', 'travail']:
+            priority = 'moyenne'
+            delay_hours = 6
+
+        # 3. Tags urgents
+        urgent_keywords = ['médecin', 'rdv', 'urgent', 'deadline', 'oublié', 'demain', 'aujourd’hui', 'maintenant']
+        text_lower = note.content.lower()
+        if any(kw in text_lower for kw in urgent_keywords):
+            priority = 'haute'
+            delay_hours = 0.001  # 1 minute pour test
+
+        # Pas d'urgence → pas de rappel
+        if priority == 'basse':
+            logger.info("Aucun rappel créé : pas d'urgence détectée")
+            return None
+
+        # Message court
+        preview = note.content[:50].strip()
+        if len(note.content) > 50:
+            preview += '...'
+        message = f"{cat.capitalize() if cat else 'Note'} : {preview}"
+
+        # Créer ou mettre à jour
+        reminder, created = Reminder.objects.update_or_create(
+            note=note,
+            user=note.user,
+            defaults={
+                'message': message,
+                'priority': priority,
+                'trigger_at': timezone.now() + timedelta(hours=delay_hours),
+                'is_read': False
+            }
+        )
+        action = 'créé' if created else 'mis à jour'
+        logger.info(f"Reminder {action} : {reminder} (priorité: {priority}, dans {delay_hours}h)")
+        return reminder
+
+    except Exception as e:
+        logger.error(f"Erreur reminder: {e}")
+        return None
+
+
+# =========================================================
+# 6. SUMMARIZATION
+# =========================================================
+def get_summarizer():
+    global _summarizer
+    if _summarizer is None:
+        try:
+            _summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+            logger.info("Summarizer loaded.")
+        except Exception as e:
+            logger.error(f"Error loading summarizer: {e}")
+            _summarizer = None
+    return _summarizer
+
+
+def generate_summary_from_notes(
+    notes_contents: List[str],
+    chunk_size: int = 1000,
+    max_summary_length: int = 150
+) -> str:
+    if not notes_contents:
+        return "Aucune note à résumer."
+
+    summarizer = get_summarizer()
+    if not summarizer:
+        return "Résumé indisponible (modèle non chargé)."
+
+    full_text = " ".join(notes_contents)
+    chunks = [full_text[i:i + chunk_size] for i in range(0, len(full_text), chunk_size)]
+
+    final_summary = []
+    for chunk in chunks:
+        try:
+            result = summarizer(
+                chunk,
+                max_length=max_summary_length,
+                min_length=50,
+                do_sample=False
+            )
+            final_summary.append(result[0]['summary_text'])
+        except Exception as e:
+            logger.warning(f"Summary chunk failed: {e}")
+
+    return " ".join(final_summary).strip()
+
+
+# =========================================================
+# 7. TEXT-TO-SPEECH (base64 MP3)
+# =========================================================
+def _detect_language(text: str) -> str:
+    sample = text.strip()[:500]
+    if not sample:
+        return "fr"
+
+    try:
+        code = detect(sample)
+        mapping = {
+            "fr": "fr", "en": "en", "es": "es", "de": "de", "it": "it",
+            "pt": "pt", "nl": "nl", "ru": "ru", "zh-cn": "zh-CN",
+            "ja": "ja", "ko": "ko", "ar": "ar", "hi": "hi",
+        }
+        return mapping.get(code, "fr")
+    except LangDetectException:
+        return "fr"
+
+
+def text_to_speech_base64(text: str, lang: str | None = None) -> str:
+    if not text.strip():
+        return ""
+
+    lang = lang or _detect_language(text)
+    lang = lang.lower().split("-")[0]
+
+    try:
+        tts = gTTS(text=text, lang=lang, slow=False)
+        buffer = BytesIO()
+        tts.write_to_fp(buffer)
+        buffer.seek(0)
+        return base64.b64encode(buffer.read()).decode()
+    except Exception as e:
+        logger.error(f"TTS error (lang={lang}): {e}")
+        return ""

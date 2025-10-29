@@ -23,6 +23,13 @@ pip install retina-face
 pip install tf-keras
 
 
+
+pip install gTTS
+pip install langdetect
+
+
+
+
 python manage.py createsuperuser
 
 python manage.py verify_images

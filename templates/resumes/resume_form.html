@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Créer un résumé – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="resume-form-container">
+    <div class="container">
+      <h1>Créer un résumé</h1>
+      <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn-primary">Enregistrer</button>
+      </form>
+      <a href="{% url 'resume_list' %}" class="btn-secondary">Annuler</a>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+</body>
+</html>

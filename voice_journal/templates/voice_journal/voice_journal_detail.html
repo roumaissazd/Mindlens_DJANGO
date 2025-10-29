@@ -170,8 +170,22 @@
         <section class="container">
             <div class="voice-detail-card">
                 <div class="voice-detail-header">
-                    <div class="voice-detail-date">
-                        {{ voice_entry.created_at|date:"d F Y à H:i" }}
+                    <div class="voice-detail-date" style="flex:1">
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                            <span style="color:#0f172a;font-weight:700;font-size:18px" id="titleDisplay">
+                                {{ voice_entry.title|default_if_none:''|default:"Sans titre" }}
+                            </span>
+                            <button class="action-btn back" id="editTitleBtn">Modifier le titre</button>
+                        </div>
+                        <div id="titleEditor" style="display:none;margin-top:10px">
+                            <input type="text" id="titleInput" value="{{ voice_entry.title|default_if_none:'' }}" placeholder="Ajouter un titre" 
+                                   style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;min-width:260px;max-width:480px" />
+                            <button class="action-btn back" id="saveTitleBtn">Enregistrer</button>
+                            <button class="action-btn delete" id="cancelTitleBtn" type="button">Annuler</button>
+                        </div>
+                        <div style="margin-top:6px;color:#64748b;font-size:14px">
+                            {{ voice_entry.created_at|date:"d F Y à H:i" }}
+                        </div>
                     </div>
                     <div class="voice-detail-actions">
                         <a href="{% url 'voice_journal_list' %}" class="action-btn back">← Retour à la liste</a>
@@ -226,5 +240,48 @@
     </main>
 
     {% include 'partials/footer.html' %}
+    <script>
+    (function(){
+        function getCSRF(){
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || (document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '');
+        }
+        const editBtn = document.getElementById('editTitleBtn');
+        const saveBtn = document.getElementById('saveTitleBtn');
+        const cancelBtn = document.getElementById('cancelTitleBtn');
+        const input = document.getElementById('titleInput');
+        const editor = document.getElementById('titleEditor');
+        const display = document.getElementById('titleDisplay');
+
+        function openEditor(){ editor.style.display = 'block'; editBtn.style.display = 'none'; setTimeout(()=>{ try{ input.focus(); input.select(); }catch{} }, 50); }
+        function closeEditor(){ editor.style.display = 'none'; editBtn.style.display = 'inline-block'; }
+
+        if (editBtn) editBtn.addEventListener('click', openEditor);
+        if (cancelBtn) cancelBtn.addEventListener('click', ()=>{ closeEditor(); });
+        if (input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveBtn.click(); }});
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async ()=>{
+                const title = (input.value || '').trim();
+                saveBtn.textContent = 'Sauvegarde…';
+                saveBtn.disabled = true;
+                try {
+                    const res = await fetch('/voice-journal/api/{{ voice_entry.pk }}/update-title/', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': getCSRF() },
+                        body: new URLSearchParams({ title })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        input.value = data.title || '';
+                        display.textContent = data.title && data.title.length ? data.title : 'Sans titre';
+                        closeEditor();
+                    } else {
+                        alert(data.error || 'Erreur de sauvegarde');
+                    }
+                } catch { alert('Erreur réseau'); }
+                finally { saveBtn.textContent = 'Enregistrer'; saveBtn.disabled = false; }
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

@@ -12,10 +12,23 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.conf import settings
-import os
+from django.views.decorators.http import require_POST
+from django.db.models import Count, Avg
 import requests
 from .models import VoiceJournal
 import time
+from pathlib import Path
+
+# Get project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# LLM for intelligent replies
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except:
+    GROQ_AVAILABLE = False
+    print("Groq not available. Install with: pip install groq")
 
 # Import ML libraries with error handling (spaces only)
 ML_LIBRARIES_AVAILABLE = True
@@ -144,7 +157,10 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
                 'maxResults': 3,
                 'type': 'video',
                 'key': api_key,
-                'safeSearch': 'moderate'
+                'safeSearch': 'moderate',
+                # Prefer videos that allow embedding and are syndicated
+                'videoEmbeddable': 'true',
+                'videoSyndicated': 'true'
             }
             resp = requests.get('https://www.googleapis.com/youtube/v3/search', params=params, timeout=8)
             resp.raise_for_status()
@@ -153,6 +169,9 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
                 vid = item.get('id', {}).get('videoId')
                 snippet = item.get('snippet', {})
                 if not vid:
+                    continue
+                # Skip live or upcoming streams which often fail to embed
+                if (snippet.get('liveBroadcastContent') or '').lower() in {'live', 'upcoming'}:
                     continue
                 results.append({
                     'title': snippet.get('title', 'Music'),
@@ -171,11 +190,126 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
             results.append({
                 'title': 'Recommended music',
                 'url': f'https://www.youtube.com/watch?v={vid}',
-                'thumbnail': None,
+                # Use robust thumbnail path; default.jpg can 404, prefer hqdefault.jpg
+                'thumbnail': f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
                 'videoId': vid,
-                'embedUrl': f'https://www.youtube-nocookie.com/embed/{vid}?rel=0&modestbranding=1&iv_load_policy=3'
+                # Use standard youtube embed to avoid player config error 153
+                'embedUrl': f'https://www.youtube.com/embed/{vid}'
             })
     return results[:3]
+
+
+def get_jamendo_music_recommendations(emotion: str) -> list[dict]:
+    """Return up to 3 Jamendo tracks with direct audio preview URLs.
+    Requires JAMENDO_CLIENT_ID in settings. Tags are mapped from emotion.
+    """
+    client_id = getattr(settings, 'JAMENDO_CLIENT_ID', '')
+    if not client_id:
+        return []
+    # Map moods to Jamendo tags to steer the vibe of recommendations
+    tag_map = {
+        'happy': 'happy,upbeat,energetic,motivational',
+        'excited': 'energetic,upbeat,workout,motivational',
+        'sad': 'piano,melancholic,calm,soothing',
+        'calm': 'ambient,chill,calm,lofi',
+        'stressed': 'relax,calm,meditation,soothing',
+        'neutral': 'lofi,chill,ambient'
+    }
+    tags = tag_map.get((emotion or 'neutral').lower(), 'lofi,chill')
+    try:
+        print(f"[Jamendo] Fetching tracks for emotion='{emotion}', tags='{tags}'")
+        def fetch(params: dict) -> list[dict]:
+            resp = requests.get('https://api.jamendo.com/v3.0/tracks', params=params, timeout=8)
+            resp.raise_for_status()
+            data = resp.json()
+            out: list[dict] = []
+            for item in (data.get('results') or [])[:3]:
+                title = item.get('name') or 'Music'
+                audio_url = item.get('audio') or ''
+                web_url = item.get('shareurl') or ''
+                img = ((item.get('album_image') or '') or '').replace('http://', 'https://')
+                if not audio_url:
+                    continue
+                out.append({
+                    'title': title,
+                    'url': web_url,
+                    'thumbnail': img,
+                    'audioUrl': audio_url,
+                    'provider': 'jamendo'
+                })
+            print(f"[Jamendo] Got {len(out)} results for params keys={list(params.keys())}")
+            return out
+
+        import random
+        base = {
+            'client_id': client_id,
+            'format': 'json',
+            'limit': 3,
+            'audioformat': 'mp31',
+            'include': 'musicinfo',
+            'order': 'popularity_total',
+            # randomize offset to avoid always returning the same top results
+            'offset': random.randint(0, 30)
+        }
+        # Pass 1: fuzzy tags from emotion
+        results = fetch({**base, 'fuzzytags': tags})
+        if results:
+            return results
+        # Pass 2: broader search queries tailored per mood
+        mood_queries = {
+            'happy': ['happy', 'upbeat', 'energetic', 'motivational'],
+            'excited': ['energetic', 'upbeat', 'dance', 'workout'],
+            'sad': ['piano', 'soothing', 'melancholic', 'calm'],
+            'calm': ['ambient', 'chill', 'lofi', 'relax'],
+            'stressed': ['relaxation', 'meditation', 'calm', 'breathing'],
+            'neutral': ['lofi', 'chill', 'focus', 'ambient']
+        }
+        for query in mood_queries.get((emotion or 'neutral').lower(), ['lofi', 'chill', 'ambient']):
+            print(f"[Jamendo] Fallback query='{query}'")
+            results = fetch({**base, 'search': query})
+            if results:
+                return results
+        return []
+    except Exception:
+        print("[Jamendo] Error while fetching tracks", flush=True)
+        return []
+
+
+def get_music_recommendations(emotion: str) -> list[dict]:
+    """Return YouTube fallback videos instantly (no API calls to avoid lag)."""
+    emotion_key = (emotion or 'neutral').lower()
+    vids = MOOD_FALLBACK_VIDEOS.get(emotion_key) or MOOD_FALLBACK_VIDEOS['neutral']
+    results = []
+    for vid in vids[:3]:
+        results.append({
+            'title': 'Musique apaisante',
+            'url': f'https://www.youtube.com/watch?v={vid}',
+            'thumbnail': f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
+            'videoId': vid,
+            'embedUrl': f'https://www.youtube.com/embed/{vid}'
+        })
+    print(f"[Music] Fast recommendations count={len(results)} for emotion='{emotion_key}'")
+    return results
+
+
+def get_music_recommendations_cached(request, emotion: str) -> list[dict]:
+    """Return fast YouTube fallback (no API, no cache needed)."""
+    return get_music_recommendations(emotion)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_music_recommendations(request):
+    """Return music recommendations for a given mood quickly (used to avoid blocking UI)."""
+    try:
+        mood = (request.POST.get('mood') or request.body.decode('utf-8') or '').strip().lower()
+        if not mood:
+            return JsonResponse({'music': []})
+        music = get_music_recommendations_cached(request, mood)
+        return JsonResponse({'music': music})
+    except Exception as e:
+        print(f"[MusicAPI] error: {e}")
+        return JsonResponse({'music': []})
 
 # Initialize models (cache them to avoid reloading)
 _asr_pipeline = None
@@ -188,14 +322,18 @@ def get_asr_pipeline():
         raise ImportError("ML libraries not available")
     global _asr_pipeline
     
-    # Always create a fresh pipeline to avoid tensor size conflicts
+    # Use cached pipeline if available
+    if _asr_pipeline is not None:
+        return _asr_pipeline
+    
     try:
-        # Uses Hugging Face Whisper model locally
+        # Uses Hugging Face Whisper model locally with PyTorch backend
         # Small/base models are faster and lighter
+        print("[ASR] Creating Whisper pipeline... (this may take a while on first use)")
         _asr_pipeline = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            device="cpu",
+            device=-1,  # Use CPU (avoiding GPU dependencies)
             chunk_length_s=30,
             return_timestamps=False,
             generate_kwargs={
@@ -203,7 +341,7 @@ def get_asr_pipeline():
                 'language': getattr(settings, 'ASR_LANGUAGE', 'fr')
             },
         )
-        print("[ASR] Fresh Whisper pipeline created")
+        print("[ASR] Whisper pipeline created successfully")
     except Exception as e:
         print(f"[ASR] Error creating pipeline: {e}")
         # Reset global variable on error
@@ -327,20 +465,93 @@ def generate_empathetic_reply(final_mood: str, user_text: str) -> str:
 def generate_opening_prompt(final_mood: str) -> str:
     mood = (final_mood or 'neutral').lower()
     if mood == 'sad':
-        return (
-            "Je perçois un peu de tristesse. Souhaites-tu que l'on parle et que je te propose des pistes pour te sentir mieux ? "
-            "Tu peux dire ‘oui’ ou me dire ce qui te pèse."
-        )
+        return "Bonjour, je suis là pour t'écouter. Dis-moi ce que tu ressens ou ce dont tu as besoin."
     if mood == 'stressed':
-        return (
-            "On dirait que le stress est présent. Veux-tu des conseils rapides ou des exercices de respiration guidés ? "
-            "Tu peux dire ‘oui’ pour commencer."
-        )
+        return "Salut, je comprends que tu sois stressé(e). Parle-moi de ce qui se passe ou ce que tu aimerais faire."
     if mood == 'happy':
-        return "Génial d'entendre cela ! Veux-tu célébrer ce qui s'est bien passé aujourd'hui ?"
+        return "Bonjour ! Ça fait plaisir d'entendre ça. Que veux-tu partager ?"
     if mood == 'calm':
-        return "Ambiance apaisée. Souhaites-tu ancrer une intention pour la suite de la journée ?"
-    return "Bonjour ! Veux-tu me dire comment tu te sens et ce dont tu as besoin ?"
+        return "Hello, ambiance apaisée. Que veux-tu faire ? On peut discuter, écouter de la musique, ou autre chose."
+    return "Bonjour ! Je suis là pour toi. Dis-moi ce que tu ressens ou ce dont tu as besoin."
+
+
+def generate_llm_reply(user_text: str, mood: str, conversation_history: list = None) -> str:
+    """
+    Generate intelligent reply using Groq LLM (free).
+    Falls back to rule-based if Groq not available.
+    """
+    # Get API key from settings
+    api_key = getattr(settings, 'GROQ_API_KEY', '')
+    
+    print(f"[LLM] Checking Groq: available={GROQ_AVAILABLE}, has_key={bool(api_key)}")
+    
+    if not GROQ_AVAILABLE or not api_key:
+        print("[LLM] Groq not available, using fallback")
+        # Fallback to rule-based
+        return generate_empathetic_reply(mood, user_text)
+    
+    try:
+        client = Groq(api_key=api_key)
+        
+        # Build context
+        context = f"""Tu es un assistant vocal empathique et naturel. L'utilisateur semble être {mood}.
+
+Réponds de façon:
+- Naturelle, comme à un ami
+- Courte (1-2 phrases max 20 mots)
+- Empathique et chaleureux
+- Personnalisée selon ce qu'il dit
+
+Tu peux:
+- L'écouter et répondre avec des mots qui tiennent
+- Poser des questions
+- Donner des conseils si il en demande
+- Proposer de la musique seulement si il mentionne vouloir écouter
+- Proposer une respiration seulement si il est très stressé
+
+Reste naturel, pas robotique. Réponds comme tu penserais si c'était un ami qui te parle."""
+
+        messages = [
+            {"role": "system", "content": context}
+        ]
+        
+        # Add conversation history
+        if conversation_history:
+            messages.extend(conversation_history[-4:])  # Keep last 4 exchanges
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_text})
+        
+        # Generate response
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # Free, fast model
+            messages=messages,
+            max_tokens=160,
+            temperature=0.7,
+        )
+        
+        reply = response.choices[0].message.content.strip()
+        
+        # Post-processing: keep concise without cutting mid-sentence
+        max_len = 140
+        if len(reply) > max_len:
+            cut = reply[:max_len]
+            # Prefer ending at sentence punctuation within the window
+            punct_positions = [cut.rfind(p) for p in ['.', '!', '?', '…']]
+            best_punct = max(punct_positions)
+            if best_punct >= 60:  # ensure it's a reasonably complete sentence
+                reply = cut[:best_punct + 1]
+            else:
+                # fallback: cut at last space and add ellipsis
+                last_space = cut.rfind(' ')
+                reply = (cut[:last_space] if last_space > 0 else cut).rstrip() + '…'
+        
+        return reply
+        
+    except Exception as e:
+        print(f"[LLM Error] {e}")
+        # Fallback to rule-based
+        return generate_empathetic_reply(mood, user_text)
 
 
 def detect_user_intent_yes_no(text: str) -> str:
@@ -475,6 +686,174 @@ def voice_journal_view(request):
 def voice_journal_list(request):
     """List all voice journal entries for the current user with filters"""
     voice_entries = VoiceJournal.objects.filter(user=request.user)
+    # Overall stats (unfiltered) for header
+    all_entries = VoiceJournal.objects.filter(user=request.user)
+    # Sentiment counts
+    raw_sent_counts = list(all_entries.values('text_sentiment').annotate(c=Count('id')))
+    sentiment_counts = {
+        (item['text_sentiment'] or '').strip().upper() or 'NEUTRAL': item['c'] for item in raw_sent_counts
+    }
+    # Emotion counts
+    raw_emo_counts = list(all_entries.values('audio_emotion').annotate(c=Count('id')))
+    emotion_counts = {
+        (item['audio_emotion'] or '').strip().lower() or 'neutral': item['c'] for item in raw_emo_counts
+    }
+    total_count = all_entries.count()
+    # Recent 7-day activity timeline and weekly stats
+    from datetime import date, timedelta
+    today = date.today()
+    last7 = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+    week_start = today - timedelta(days=6)
+    week_entries = all_entries.filter(created_at__date__gte=week_start)
+    # Totals per day
+    raw_by_day = list(all_entries.values('created_at__date').annotate(c=Count('id')))
+    by_day_map = {str(item['created_at__date']): item['c'] for item in raw_by_day}
+    timeline = []
+    max_day = 1
+    for d in last7:
+        key = str(d)
+        cnt = int(by_day_map.get(key, 0))
+        timeline.append({'date': d, 'count': cnt})
+        if cnt > max_day:
+            max_day = cnt
+    # Precompute bar heights in pixels for template simplicity
+    timeline_bars = []
+    for item in timeline:
+        ratio = (item['count'] / max_day) if max_day > 0 else 0
+        height_px = int(6 + ratio * 50)
+        timeline_bars.append({'date': item['date'], 'count': item['count'], 'height': height_px})
+
+    # Per-day sentiment counts and average scores for a richer chart
+    raw_day_sent = list(week_entries.values('created_at__date', 'text_sentiment').annotate(
+        c=Count('id'),
+        avg=Avg('text_sentiment_score')
+    ))
+    per_day_sent_map = {}
+    for row in raw_day_sent:
+        day = str(row['created_at__date'])
+        s = (row['text_sentiment'] or '').strip().upper() or 'NEUTRAL'
+        day_bucket = per_day_sent_map.setdefault(day, {
+            'POSITIVE': {'c': 0, 'avg': 0.0},
+            'NEUTRAL': {'c': 0, 'avg': 0.0},
+            'NEGATIVE': {'c': 0, 'avg': 0.0},
+        })
+        day_bucket[s]['c'] += int(row['c'] or 0)
+        # store/overwrite avg per sentiment (OK since grouped)
+        day_bucket[s]['avg'] = float(row.get('avg') or 0.0)
+
+    per_day_sentiments = []
+    max_pos = max_neu = max_neg = 0
+    per_day_bars = []
+    mood_line_vals = []  # signed mood index per day (-1..1)
+    for d in last7:
+        key = str(d)
+        vals = per_day_sent_map.get(key, {
+            'POSITIVE': {'c': 0, 'avg': 0.0},
+            'NEUTRAL': {'c': 0, 'avg': 0.0},
+            'NEGATIVE': {'c': 0, 'avg': 0.0},
+        })
+        per_day_sentiments.append({'date': d,
+                                   'POSITIVE': vals['POSITIVE']['c'],
+                                   'NEUTRAL': vals['NEUTRAL']['c'],
+                                   'NEGATIVE': vals['NEGATIVE']['c']})
+        if vals['POSITIVE']['c'] > max_pos: max_pos = vals['POSITIVE']['c']
+        if vals['NEUTRAL']['c'] > max_neu: max_neu = vals['NEUTRAL']['c']
+        if vals['NEGATIVE']['c'] > max_neg: max_neg = vals['NEGATIVE']['c']
+
+        # Determine dominant sentiment and intensity for horizontal bar
+        dom = 'NEUTRAL'
+        if vals['POSITIVE']['c'] >= vals['NEGATIVE']['c'] and vals['POSITIVE']['c'] > 0:
+            dom = 'POSITIVE'
+            intensity = vals['POSITIVE']['avg'] or 0.5
+        elif vals['NEGATIVE']['c'] > vals['POSITIVE']['c'] and vals['NEGATIVE']['c'] > 0:
+            dom = 'NEGATIVE'
+            intensity = vals['NEGATIVE']['avg'] or 0.5
+        else:
+            intensity = 0.2
+        # normalize 0..1 for width
+        width_pct = int(max(0, min(1, intensity)) * 100)
+        cls = 'pos' if dom == 'POSITIVE' else ('neg' if dom == 'NEGATIVE' else 'neu')
+        per_day_bars.append({
+            'date': d, 'label': d.strftime('%d'), 'dominant': dom, 'cls': cls, 'intensity': intensity, 'width': width_pct
+        })
+
+        # Signed mood index for line: pos avg - neg avg
+        mood_index = (vals['POSITIVE']['avg'] or 0.0) - (vals['NEGATIVE']['avg'] or 0.0)
+        # clamp -1..1
+        if mood_index > 1: mood_index = 1
+        if mood_index < -1: mood_index = -1
+        mood_line_vals.append(mood_index)
+
+    # Build SVG polyline points for sparkline (width=210, height=50)
+    width, height, margin = 210, 50, 2
+    step = (width - 2 * margin) / (max(1, len(last7) - 1))
+    def build_points(series_vals, vmax):
+        pts = []
+        for i, v in enumerate(series_vals):
+            x = margin + i * step
+            ratio = (v / vmax) if vmax > 0 else 0
+            y = margin + (1 - ratio) * (height - 2 * margin)
+            pts.append(f"{int(x)},{int(y)}")
+        return ' '.join(pts)
+
+    pos_vals = [d['POSITIVE'] for d in per_day_sentiments]
+    neu_vals = [d['NEUTRAL'] for d in per_day_sentiments]
+    neg_vals = [d['NEGATIVE'] for d in per_day_sentiments]
+
+    spark_pos = build_points(pos_vals, max_pos)
+    spark_neu = build_points(neu_vals, max_neu)
+    spark_neg = build_points(neg_vals, max_neg)
+
+    # Mood line from signed index (-1..1) mapped to 0..1 for plotting
+    def build_signed_points(vals):
+        pts = []
+        for i, v in enumerate(vals):
+            x = margin + i * step
+            ratio = (v + 1) / 2  # -1..1 to 0..1
+            y = margin + (1 - ratio) * (height - 2 * margin)
+            pts.append(f"{int(x)},{int(y)}")
+        return ' '.join(pts)
+    mood_line_points = build_signed_points(mood_line_vals)
+
+    # Weekly sentiment counts and summary
+    week_sent_counts = list(week_entries.values('text_sentiment').annotate(c=Count('id')))
+    week_counts = { (r['text_sentiment'] or '').upper(): r['c'] for r in week_sent_counts }
+    dom_week = max(['POSITIVE','NEUTRAL','NEGATIVE'], key=lambda k: week_counts.get(k, 0)) if week_entries.exists() else 'NEUTRAL'
+    emoji_map = {'POSITIVE': '😊', 'NEUTRAL': '😐', 'NEGATIVE': '😔'}
+    week_summary = {
+        'dominant': dom_week,
+        'emoji': emoji_map.get(dom_week, '😐')
+    }
+    # Peak positive day (by count)
+    peak_pos_day = None
+    max_pos_count = -1
+    peak_neg_day = None
+    max_neg_count = -1
+    peak_total_day = None
+    max_total_count = -1
+    for item in per_day_sentiments:
+        if item['POSITIVE'] > max_pos_count:
+            max_pos_count = item['POSITIVE']
+            peak_pos_day = item['date']
+        if item['NEGATIVE'] > max_neg_count:
+            max_neg_count = item['NEGATIVE']
+            peak_neg_day = item['date']
+        total_c = item['POSITIVE'] + item['NEUTRAL'] + item['NEGATIVE']
+        if total_c > max_total_count:
+            max_total_count = total_c
+            peak_total_day = item['date']
+
+    # Pie chart percentages (weekly)
+    week_total = sum(week_counts.get(k,0) for k in ['POSITIVE','NEUTRAL','NEGATIVE']) or 1
+    pie_pct = {
+        'positive': int(100 * week_counts.get('POSITIVE',0) / week_total),
+        'neutral': int(100 * week_counts.get('NEUTRAL',0) / week_total),
+        'negative': int(100 * week_counts.get('NEGATIVE',0) / week_total),
+    }
+
+    # If there are zero positives in the week, drop peak_pos_day to avoid confusion
+    if max_pos_count <= 0:
+        peak_pos_day = None
     
     # Get filter parameters
     search_query = request.GET.get('search', '').strip()
@@ -486,7 +865,10 @@ def voice_journal_list(request):
     
     # Apply filters
     if search_query:
-        voice_entries = voice_entries.filter(transcription__icontains=search_query)
+        from django.db.models import Q
+        voice_entries = voice_entries.filter(
+            Q(title__icontains=search_query) | Q(transcription__icontains=search_query)
+        )
     
     if sentiment_filter:
         # Normalize the filter value for comparison
@@ -592,6 +974,25 @@ def voice_journal_list(request):
         'unique_emotions': unique_emotions,
         'active_sentiment_label': active_sentiment_label,
         'active_emotion_label': active_emotion_label,
+        # Stats
+        'stats_total': total_count,
+        'stats_sentiments': sentiment_counts,
+        'stats_emotions': emotion_counts,
+        'stats_timeline': timeline,
+        'stats_timeline_max': max_day,
+        'stats_timeline_bars': timeline_bars,
+        'stats_series_points': {
+            'positive': spark_pos,
+            'neutral': spark_neu,
+            'negative': spark_neg,
+        },
+        'stats_week_summary': week_summary,
+        'stats_peak_positive_day': peak_pos_day,
+        'stats_peak_negative_day': peak_neg_day,
+        'stats_peak_total_day': peak_total_day,
+        'stats_per_day_bars': per_day_bars,
+        'stats_mood_line_points': mood_line_points,
+        'stats_pie_pct': pie_pct,
     }
     return render(request, 'voice_journal/voice_journal_list.html', context)
 
@@ -609,6 +1010,23 @@ def voice_journal_detail(request, pk):
         'voice_entry': voice_entry,
     }
     return render(request, 'voice_journal/voice_journal_detail.html', context)
+
+
+@login_required
+@require_POST
+def voice_journal_update_title(request, pk):
+    """Update title of a voice journal entry (AJAX)."""
+    try:
+        entry = VoiceJournal.objects.get(pk=pk, user=request.user)
+    except VoiceJournal.DoesNotExist:
+        return JsonResponse({'success': False, 'error': "Introuvable"}, status=404)
+    title = (request.POST.get('title') or '').strip()
+    # Hard limit in view as well
+    if len(title) > 120:
+        title = title[:120]
+    entry.title = title
+    entry.save(update_fields=['title'])
+    return JsonResponse({'success': True, 'title': entry.title})
 
 
 @login_required
@@ -674,24 +1092,24 @@ def process_audio(request):
             
             # Transcribe audio using Whisper (Hugging Face transformers)
             t_asr0 = time.time()
+            transcription = ""
             try:
+                print(f"[ASR] Starting transcription of {wav_full_path}")
                 asr = get_asr_pipeline()
-                asr_result = asr(wav_full_path)
-                transcription = asr_result.get("text", "")
-                print(f"[ASR] Transcription successful: '{transcription}'")
+                asr_result = asr(wav_full_path, return_timestamps=False)
+                transcription = asr_result.get("text", "").strip()
+                if transcription:
+                    print(f"[ASR] Transcription successful: '{transcription[:50]}...'")
+                else:
+                    print("[ASR] Transcription returned empty string")
             except Exception as e:
-                print(f"[ASR] Error during transcription: {e}")
-                # Try to reset and retry once
-                try:
-                    global _asr_pipeline
-                    _asr_pipeline = None  # Force reset
-                    asr = get_asr_pipeline()
-                    asr_result = asr(wav_full_path)
-                    transcription = asr_result.get("text", "")
-                    print(f"[ASR] Retry successful: '{transcription}'")
-                except Exception as retry_e:
-                    print(f"[ASR] Retry failed: {retry_e}")
-                    transcription = "Erreur de transcription - veuillez réessayer"
+                print(f"[ASR] Error during transcription: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Fallback - use audio emotion for mood detection instead
+                transcription = "[Enregistrement audio non transcrit]"
+                print("[ASR] Using fallback transcription")
             t_asr1 = time.time()
             
             # Analyze text sentiment
@@ -716,6 +1134,7 @@ def process_audio(request):
             voice_entry = VoiceJournal.objects.create(
                 user=request.user,
                 audio_file=wav_path,
+                title='',
                 transcription=transcription,
                 text_sentiment=text_sentiment,
                 text_sentiment_score=text_sentiment_score,
@@ -727,7 +1146,8 @@ def process_audio(request):
             final_mood = decide_mood(audio_emotion, text_sentiment)
             ai_message = generate_ai_message(final_mood)
             theme = EMOTION_TO_THEME.get(final_mood, EMOTION_TO_THEME['neutral'])
-            music = get_youtube_music_recommendations(final_mood)
+            # Do not block on music here; fetch asynchronously on client
+            music = []
 
             # Clean up temporary file
             default_storage.delete(temp_path)
@@ -833,7 +1253,8 @@ def api_analyze_voice(request):
         final_mood = decide_mood(audio_emotion, text_sentiment)
         ai_message = generate_ai_message(final_mood)
         theme = EMOTION_TO_THEME.get(final_mood, EMOTION_TO_THEME['neutral'])
-        music = get_youtube_music_recommendations(final_mood)
+        # Non-blocking: let client fetch music via /voice-journal/api/music/
+        music = []
 
         return JsonResponse({
             'emotion': final_mood,
@@ -878,26 +1299,42 @@ def api_voice_agent_turn(request):
                 'mood': final_mood,
             }
             request.session.modified = True
-            music = get_youtube_music_recommendations(final_mood)
+            music = get_music_recommendations(final_mood)
+            # Do not send preview on start; only show when user asks for music
+            preview = None
             return JsonResponse({
                 'success': True,
                 'mood': final_mood,
                 'user_text': '',
                 'reply_text': opening,
                 'music': music,
+                'preview': preview,
             })
 
         if 'audio' not in request.FILES:
-            # Pendant les exercices de respiration, accepter les requêtes vides
-            state = request.session.get('agent_state', {})
+            # Requête sans audio - initialiser le state si nécessaire
+            state = request.session.get('agent_state')
+            if not state:
+                # Première requête sans start=1 - initialiser
+                state = {
+                    'topic': 'support',
+                    'step': 0,
+                    'mood': final_mood or 'neutral'
+                }
+                request.session['agent_state'] = state
+                request.session.modified = True
+            
             topic = state.get('topic', 'support')
-            if topic == 'breathing':
-                # Continuer l'exercice de respiration même sans audio
-                text = ''
-                intent = 'unknown'
+            text = ''
+            intent = 'unknown'
+            
+            # Appeler route_next pour obtenir la réponse
+            try:
                 reply, state_next, end_call_local, intent = route_next(state, text)
+                state_next['mood'] = state.get('mood', final_mood)
                 request.session['agent_state'] = state_next
                 request.session.modified = True
+                
                 return JsonResponse({
                     'success': True,
                     'user_text': '',
@@ -905,7 +1342,11 @@ def api_voice_agent_turn(request):
                     'intent': intent,
                     'end_call': end_call_local,
                 })
-            return JsonResponse({'error': 'No audio provided'}, status=400)
+            except Exception as e:
+                print(f"[Agent] Error in route_next: {e}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({'error': str(e)}, status=400)
 
         # Save temp input
         audio_file = request.FILES['audio']
@@ -964,100 +1405,147 @@ def api_voice_agent_turn(request):
             wants_tips = any(k in t for k in ['conseil', 'astuce', 'propos', 'aide', 'idée', 'idee', 'donne', 'propose'])
             wants_music = any(k in t for k in ['musique', 'music', 'chanson', 'écouter', 'ecouter', 'playlist', 'lofi'])
 
-            # Handle music topic first (before checking for "no" exit)
+            # Handle music playback
             if topic == 'music':
-                vids = state.get('vids') or get_youtube_music_recommendations(mood_s)
+                vids = state.get('vids') or get_music_recommendations_cached(request, mood_s)
+                print(f"[MusicTopic] vids_count={len(vids) if vids else 0}, step={step}")
                 step = int(state.get('step') or 0)
-                print(f"[VoiceAgent] Music context: intent='{intent}', step={step}, vids_count={len(vids) if vids else 0}")
-                
-                # Handle user feedback
-                if intent == 'yes':
-                    reply = (
-                        "Parfait ! As-tu besoin d'autre chose ? "
-                        "Je peux proposer une respiration ou quelques conseils."
-                    )
-                    # Revenir en mode support pour poursuivre l'échange
-                    return reply, {'topic': 'support', 'step': 0, 'mood': mood_s, 'vids': vids, 'liked': step}, False, intent
-                if intent == 'no':
-                    step += 1
-                # Serve next preview if available
-                if vids and step < len(vids):
-                    state_next = {'topic': 'music', 'step': step, 'mood': mood_s, 'vids': vids}
-                    return "Autre extrait musical.", state_next, False, intent
-                # No more previews
-                reply = "Plus d'extraits. Veux-tu une respiration guidée ?"
-                return reply, {'topic': 'breathing', 'step': 0, 'mood': mood_s}, False, intent
+                play_full = bool(state.get('play_full'))
 
-            # Music request is handled immediately from any topic
-            if wants_music:
-                vids = get_youtube_music_recommendations(mood_s)
-                idx = 0
-                if vids:
-                    state_next = {'topic': 'music', 'step': idx, 'mood': mood_s, 'vids': vids}
-                    return "Extrait musical.", state_next, False, intent
-                # Fallback if no videos
-                reply = "Pas de musique disponible. Veux-tu une respiration ?"
-                return reply, {'topic': 'support', 'step': 0, 'mood': mood_s}, False, intent
+                t_lower = (text or '').lower()
+                wants_next = any(k in t_lower for k in ['suivant', 'autre', 'next', 'skip', 'changer'])
+                wants_full = any(k in t_lower for k in ['entier', 'complet', 'full'])
 
-            # Exit early on clear no - but only if not in music context
-            if intent == 'no' and topic != 'music':
-                reply = (
-                    "Merci pour ton retour. Je te souhaite un moment plus doux. "
-                    "Quand tu voudras, je serai là."
+                # Positive confirmation -> accept current music and go back to support flow
+                if intent == 'yes' and not wants_next and not wants_full:
+                    state_next = {
+                        'topic': 'support',
+                        'step': 0,
+                        'mood': mood_s,
+                        'history': state.get('history', [])
+                    }
+                    reply = "Super. Est-ce que tu as besoin d'autre chose ?"
+                    return reply, state_next, False, intent
+
+                # Negative or ask to change -> advance to next track if any
+                if intent == 'no' or wants_next:
+                    if vids and step + 1 < len(vids):
+                        state['step'] = step + 1
+                        state['play_full'] = False
+                        reply = "D'accord, je te propose un autre extrait. Dis-moi si ça te convient."
+                        return reply, state, False, intent
+                    else:
+                        # No more tracks; return to support with a question
+                        state_next = {'topic': 'support', 'step': 0, 'mood': mood_s}
+                        reply = (
+                            "Je n'ai plus d'extraits pour l'instant. Souhaites-tu autre chose, "
+                            "comme discuter ou un exercice de respiration ?"
+                        )
+                        return reply, state_next, False, intent
+
+                # Ask to play the full version
+                if wants_full:
+                    state['play_full'] = True
+                    reply = "Très bien, je lance la version complète. Dis-moi quand arrêter."
+                    return reply, state, False, intent
+
+                # Default while in music topic: keep conversation light but focused on music feedback
+                conversation_history = state.get('history', [])
+                guidance = (
+                    "Réponds brièvement et demande si la musique convient, propose 'suivant' ou 'version complète'."
                 )
-                end_call_local = True
-                return reply, {'topic': 'end', 'step': 0, 'mood': mood_s}, end_call_local, intent
+                reply = generate_llm_reply(f"{text}\n{guidance}", mood_s, conversation_history)
+                return reply, state, False, intent
 
-            # Move to breathing if stressed/sad + user wants calm/tips or says yes at support
+            # Support mode - mostly handled by LLM
             if topic == 'support':
-                if intent == 'yes' or wants_breathing or wants_tips or mood_s in {'stressed', 'sad'}:
+                
+                # Check if user explicitly wants music or breathing BEFORE asking LLM
+                text_lower = text.lower()
+                if 'musique' in text_lower or 'music' in text_lower:
+                    # User wants music
+                    vids = get_music_recommendations_cached(request, mood_s)
+                    if vids:
+                        state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
+                        return "Extrait musical.", state_next, False, intent
+                
+                if 'respir' in text_lower or 'exercice' in text_lower:
+                    # User wants breathing
                     topic = 'breathing'
                     step = 0
-                else:
-                    # Stay supportive
-                    reply = generate_empathetic_reply(mood_s, text)
-                    return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+                    state['topic'] = topic
+                    state['step'] = step
+                    return reply, state, False, intent
+                
+                # Use LLM for ALL other replies
+                conversation_history = state.get('history', [])
+                reply = generate_llm_reply(text, mood_s, conversation_history)
+                
+                # Update conversation history
+                new_history = conversation_history + [
+                    {"role": "user", "content": text},
+                    {"role": "assistant", "content": reply}
+                ]
+                state['history'] = new_history[-6:]  # Keep last 6 messages
+                
+                return reply, state, False, intent
 
             # Breathing protocol (box breathing like 4-4-6, then reflect)
             if topic == 'breathing':
+                introduction = "D'accord. On commence une respiration simple."
                 guide = [
-                    "D'accord. On commence une respiration simple. Inspire 4 secondes.",
-                    "Bloque 4 secondes.",
-                    "Expire doucement 6 secondes.",
-                    "Très bien. On refait une fois si tu veux. Dis 'oui' pour refaire, sinon 'non'.",
+                    introduction,  # step 0: Introduction
+                    "Inspire 4 secondes.",  # step 1: Première instruction
+                    "Bloque 4 secondes.",  # step 2
+                    "Expire doucement 6 secondes.",  # step 3
+                    "Très bien. On refait une fois si tu veux. Dis 'oui' pour refaire, sinon 'non'.",  # step 4
                 ]
-                if step < len(guide):
+                
+                # Si step est 0 (début), donner l'introduction et passer à step 1
+                if step == 0:
+                    reply = guide[0]
+                    state['topic'] = 'breathing'
+                    state['step'] = 1
+                    return reply, state, False, intent
+                
+                # Si step est 1, 2, ou 3, donner automatiquement l'étape suivante sans attendre
+                elif step < len(guide):
                     reply = guide[step]
-                    step += 1
+                    state['topic'] = 'breathing'
+                    state['step'] = step + 1
+                    return reply, state, False, intent
+                
+                # Si on est à la fin (step == len(guide)), demander si on refait
                 else:
+                    state['auto_continue'] = False
                     if intent == 'yes':
-                        step = 0
+                        state['step'] = 0
                         reply = guide[0]
+                        state['topic'] = topic
                     elif intent == 'no':
                         reply = (
-                            "Parfait. Comment te sens-tu maintenant ? Si tu veux, je peux sugerer une petite action positive (ex: marcher 2 minutes)."
+                            "Très bien. Est-ce que tu veux écouter de la musique apaisante, "
+                            "ou as-tu besoin d'autre chose ? Dis-moi ce que tu veux."
                         )
                         topic = 'support'
-                        step = 0
-                    elif intent == 'unknown' and not text.strip():
-                        # Si l'utilisateur ne dit rien pendant l'exercice, continuer automatiquement
-                        if step == 1:  # "Bloque 4 secondes" - étape silencieuse
-                            reply = guide[step]  # "Expire doucement 6 secondes"
-                            step += 1
-                        elif step == 2:  # "Expire doucement 6 secondes" - étape silencieuse
-                            reply = guide[step]  # Demander si on refait
-                            step += 1
-                        else:
-                            # Si on est à la fin et pas de réponse, proposer de continuer
-                            reply = "Souhaites-tu refaire un cycle de respiration ?"
+                        state['topic'] = topic
+                        state['step'] = 0
+                        state['last_message'] = reply
                     else:
                         reply = "Souhaites-tu refaire un cycle de respiration ?"
-                return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+                
+                return reply, state, False, intent
 
 
-            # Fallback
-            reply = generate_empathetic_reply(mood_s, text)
-            return reply, {'topic': topic, 'step': step, 'mood': mood_s}, False, intent
+            # Fallback - use LLM for any remaining cases
+            conversation_history = state.get('history', [])
+            reply = generate_llm_reply(text, mood_s, conversation_history)
+            new_history = conversation_history + [
+                {"role": "user", "content": text},
+                {"role": "assistant", "content": reply}
+            ]
+            state['history'] = new_history[-6:]
+            return reply, state, False, intent
 
         if not transcription:
             reply_text = "Je n'ai pas bien entendu. Peux-tu répéter en quelques mots ?"
@@ -1065,6 +1553,8 @@ def api_voice_agent_turn(request):
             intent = 'unknown'
         else:
             reply_text, new_state, end_call, intent = route_next(state, transcription)
+            # Stocker le dernier message pour le contexte
+            new_state['last_message'] = reply_text
             request.session['agent_state'] = new_state
             request.session.modified = True
 
@@ -1072,20 +1562,39 @@ def api_voice_agent_turn(request):
         preview = None
         ns = request.session.get('agent_state') or {}
         if ns.get('topic') == 'music':
-            vids = ns.get('vids') or get_youtube_music_recommendations(final_mood)
+            vids = ns.get('vids') or []
             step = int(ns.get('step') or 0)
+            play_full = bool(ns.get('play_full'))
             if vids and step < len(vids):
                 vid = vids[step]
                 embed = (vid.get('embedUrl') or '')
-                if embed:
-                    joiner = '&' if '?' in embed else '?'
-                    embed = f"{embed}{joiner}autoplay=1&start=0&end=15&mute=0&modestbranding=1"
+                audio = (vid.get('audioUrl') or '')
+                if audio:
+                    print(f"[MusicTopic] Building preview for track step={step}, has_audio={bool(audio)}, has_embed={bool(embed)}")
+                    preview = {
+                        'title': vid.get('title') or 'Extrait musical',
+                        'audioUrl': audio,
+                    }
+                elif embed:
+                    # Strip any existing params to avoid duplicates
+                    base_embed = embed.split('?', 1)[0]
+                    # Safe params: avoid jsapi/origin; show controls for easier interaction
+                    params_base = (
+                        "autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3"
+                    )
+                    embed = base_embed
+                    joiner = '?' if '?' not in embed else '&'
+                    if play_full:
+                        embed = f"{embed}{joiner}{params_base}"
+                    else:
+                        # 15s preview window
+                        embed = f"{embed}{joiner}{params_base}&start=0&end=15"
                     preview = {
                         'title': vid.get('title') or 'Musique apaisante',
                         'embedUrl': embed,
                     }
 
-        music = get_youtube_music_recommendations(final_mood)
+        music = get_music_recommendations(final_mood)
 
         return JsonResponse({
             'success': True,
