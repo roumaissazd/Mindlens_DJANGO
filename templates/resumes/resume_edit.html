@@ -1,0 +1,37 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Éditer – {{ resume.title }} – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}">
+  <link rel="stylesheet" href="{% static 'css/resume.css' %}">
+  <style>
+    textarea { width:100%; min-height:300px; font-family: inherit; padding:1rem; }
+    .form-actions { margin-top:1rem; text-align:right; }
+    .btn { padding:.5rem 1rem; border:none; border-radius:4px; cursor:pointer; }
+    .btn-primary { background:#007bff; color:white; }
+    .btn-secondary { background:#6c757d; color:white; margin-right:.5rem; }
+  </style>
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="resume-generate-container">
+    <div class="container">
+      <h1>Éditer le résumé</h1>
+      <form method="post">
+        {% csrf_token %}
+        <textarea name="content" required>{{ resume.content }}</textarea>
+        <div class="form-actions">
+          <a href="{% url 'resume_detail' resume.pk %}" class="btn btn-secondary">Annuler</a>
+          <button type="submit" class="btn btn-primary">Sauvegarder</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+</body>
+</html>

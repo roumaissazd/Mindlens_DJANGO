@@ -1,0 +1,538 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ resume.title|default:"Résumé" }} – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --color-primary: #4A90E2;
+      --color-secondary: #50E3C2;
+      --color-accent: #F5A623;
+      --color-danger: #e74c3c;
+      --color-bg: #F9FAFB;
+      --color-card: #ffffff;
+      --color-text: #333333;
+      --color-muted: #667085;
+      --color-border: #eef0f4;
+    }
+
+    .note-detail-container {
+      padding: 2rem 0;
+    }
+
+    .breadcrumb {
+      margin-bottom: 1.5rem;
+    }
+
+    .breadcrumb-link {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .breadcrumb-link:hover {
+      text-decoration: underline;
+    }
+
+    .note-detail-card {
+      background: var(--color-card);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      border: 1px solid var(--color-border);
+    }
+
+    .note-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .note-detail-meta {
+      flex: 1;
+    }
+
+    .note-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .note-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .category-week { background: #e3f2fd; color: #1976d2; }
+    .category-month { background: #e8f5e9; color: #388e3c; }
+    .category-year { background: #fff3e0; color: #f57c00; }
+    .category-famille { background: #fce4ec; color: #c2185b; }
+    .category-travail { background: #e1f5fe; color: #0277bd; }
+    .category-voyage { background: #f3e5f5; color: #7b1fa2; }
+    .category-sante { background: #e8f5e8; color: #2e7d32; }
+    .favorite { background: #fff8e1; color: #ff8f00; }
+
+    .note-dates {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      color: var(--color-muted);
+    }
+
+    .note-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .btn-favorite-detail {
+      background: none;
+      border: none;
+      font-size: 1.6rem;
+      cursor: pointer;
+      color: #ccc;
+      transition: all 0.2s;
+    }
+
+    .btn-favorite-detail.active,
+    .btn-favorite-detail:hover {
+      color: #ff8f00;
+      transform: scale(1.1);
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-edit {
+      background: var(--color-secondary);
+      color: white;
+    }
+
+    .btn-edit:hover {
+      background: #3dc9a7;
+    }
+
+    .btn-delete {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    .btn-delete:hover {
+      background: #c0392b;
+    }
+
+    .note-detail-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--color-text);
+      margin: 1.5rem 0 1rem;
+      line-height: 1.3;
+    }
+
+    .note-detail-content {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: #444;
+      margin-bottom: 2rem;
+      white-space: pre-wrap;
+    }
+
+    .tts-section {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 2rem 0;
+      border: 1px solid var(--color-border);
+    }
+
+    .tts-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tts-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .tts-btn {
+      background: var(--color-primary);
+      color: white;
+      border: none;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      font-size: 1.4rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(74,144,226,0.3);
+    }
+
+    .tts-btn:hover {
+      background: #3a7bc8;
+      transform: translateY(-2px);
+    }
+
+    .tts-btn.paused {
+      background: #6c757d;
+    }
+
+    #ttsStatus {
+      font-size: 0.95rem;
+      color: var(--color-muted);
+      font-style: italic;
+    }
+
+    #voiceSelect {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: white;
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .btn-primary, .btn-secondary {
+      padding: 0.75rem 1.5rem;
+      border-radius: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #3a7bc8;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: #f1f3f5;
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: #e2e6ea;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: white;
+      padding: 2rem;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal h3 {
+      color: var(--color-danger);
+      margin-bottom: 1rem;
+      font-size: 1.3rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-confirm, .btn-cancel {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-confirm {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    .btn-confirm:hover {
+      background: #c0392b;
+    }
+
+    .btn-cancel {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-cancel:hover {
+      background: #5a6268;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="note-detail-container">
+    <div class="container">
+      <!-- Breadcrumb -->
+      <nav class="breadcrumb">
+        <a href="{% url 'resume_list' %}" class="breadcrumb-link">Retour aux résumés</a>
+      </nav>
+
+      <!-- Resume Card -->
+      <article class="note-detail-card">
+        <!-- Header -->
+        <div class="note-detail-header">
+          <div class="note-detail-meta">
+            <div class="note-badges">
+              {% if resume.period %}
+                <span class="note-badge category-{{ resume.period }}">
+                  {{ resume.get_period_display }}
+                </span>
+              {% endif %}
+              {% if resume.category %}
+                <span class="note-badge category-{{ resume.category }}">
+                  {{ resume.get_category_display }}
+                </span>
+              {% endif %}
+              {% if resume.is_favorite %}
+                <span class="note-badge favorite">Favori</span>
+              {% endif %}
+            </div>
+            <div class="note-dates">
+              <span class="note-date">Créé le {{ resume.created_at|date:"d/m/Y à H:i" }}</span>
+            </div>
+          </div>
+
+          <div class="note-actions">
+            <button class="btn-favorite-detail {% if resume.is_favorite %}active{% endif %}"
+                    data-resume-id="{{ resume.id }}"
+                    title="{% if resume.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}">
+            </button>
+            <a href="{% url 'resume_edit' resume.pk %}" class="btn-action btn-edit" title="Modifier">
+              Modifier
+            </a>
+            <button type="button" class="btn-action btn-delete" id="openDeleteModal" title="Supprimer">
+              Supprimer
+            </button>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <h1 class="note-detail-title">
+          {{ resume.title|default:"Résumé sans titre" }}
+        </h1>
+
+        <!-- Content -->
+        <div class="note-detail-content">
+          {{ resume.content|linebreaks }}
+        </div>
+
+        <!-- TTS Section -->
+        <div class="tts-section">
+          <h3 class="tts-title">Écouter le résumé</h3>
+          <div class="tts-controls">
+            <button type="button" id="playTTS" class="tts-btn" title="Écouter">
+              <i class="fas fa-volume-up"></i>
+            </button>
+            <span id="ttsStatus">Cliquez pour écouter</span>
+            <select id="voiceSelect">
+              <option value="">Voix par défaut</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Tags Auto -->
+        {% if resume.auto_tags.tags %}
+          <div class="tags-section">
+            <h3 class="tags-title">Tags générés par IA</h3>
+            <div class="tags-list">
+              {% for tag in resume.auto_tags.tags|slice:":6" %}
+                <span class="tag tag-auto">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <a href="{% url 'resume_generate' %}" class="btn-primary">
+            Générer un nouveau résumé
+          </a>
+          <a href="{% url 'resume_list' %}" class="btn-secondary">
+            Tous les résumés
+          </a>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <!-- Modal Suppression -->
+  <div id="deleteModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Supprimer le résumé ?</h3>
+      <p>Êtes-vous sûr de vouloir supprimer <strong>"{{ resume.title|default:'ce résumé' }}"</strong> ?</p>
+      <form method="POST" action="{% url 'resume_delete' resume.pk %}">
+        {% csrf_token %}
+        <div class="modal-actions">
+          <button type="submit" class="btn-confirm">Oui, supprimer</button>
+          <button type="button" class="btn-cancel" id="closeModal">Annuler</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% include 'partials/footer.html' %}
+
+  <script src="{% static 'js/notes.js' %}"></script>
+  <script>
+    // === TTS ===
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('playTTS');
+      const status = document.getElementById('ttsStatus');
+      const voiceSelect = document.getElementById('voiceSelect');
+      let utterance = null;
+      let voices = [];
+
+      function loadVoices() {
+        voices = speechSynthesis.getVoices();
+        voiceSelect.innerHTML = '<option value="">Voix par défaut</option>';
+        const langGroups = {};
+        voices.forEach((voice, i) => {
+          const lang = voice.lang.split('-')[0];
+          if (!langGroups[lang]) langGroups[lang] = [];
+          langGroups[lang].push({ name: voice.name, index: i });
+        });
+        Object.keys(langGroups).sort().forEach(lang => {
+          const group = document.createElement('optgroup');
+          group.label = lang.toUpperCase();
+          langGroups[lang].forEach(v => {
+            group.appendChild(new Option(v.name, v.index));
+          });
+          voiceSelect.appendChild(group);
+        });
+      }
+
+      speechSynthesis.onvoiceschanged = loadVoices;
+      loadVoices();
+
+      const detectLang = (txt) => {
+        const fr = /je|tu|il|elle|nous|vous|le|la|et|mais|ou|si|car|donc/i.test(txt);
+        return fr ? 'fr' : 'en';
+      };
+
+      btn.addEventListener('click', () => {
+        const text = `{{ resume.content|escapejs }}`.trim();
+        if (!text) { status.textContent = "Aucun contenu."; return; }
+
+        if (speechSynthesis.speaking) {
+          speechSynthesis.cancel();
+          status.textContent = "Cliquez pour écouter";
+          btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+          return;
+        }
+
+        utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = detectLang(text);
+        utterance.rate = 0.9;
+
+        const sel = voiceSelect.value;
+        if (sel) utterance.voice = voices[sel];
+        else {
+          const pref = voices.find(v => v.lang.startsWith(utterance.lang));
+          if (pref) utterance.voice = pref;
+        }
+
+        utterance.onstart = () => {
+          status.textContent = "Lecture en cours…";
+          btn.innerHTML = '<i class="fas fa-pause"></i>';
+        };
+        utterance.onend = () => {
+          status.textContent = "Terminé !";
+          btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        };
+        speechSynthesis.speak(utterance);
+      });
+    });
+
+    // === MODAL ===
+    const modal = document.getElementById('deleteModal');
+    const openBtn = document.getElementById('openDeleteModal');
+    const closeBtn = document.getElementById('closeModal');
+
+    openBtn.onclick = () => modal.style.display = 'flex';
+    closeBtn.onclick = () => modal.style.display = 'none';
+    window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+  </script>
+</body>
+</html>

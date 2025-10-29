@@ -179,3 +179,23 @@ class Reminder(models.Model):
 
     def __str__(self):
         return f"{self.get_priority_display()} - {self.message[:30]}"
+    
+    
+
+
+    
+
+    
+class Resume(models.Model):
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    audio_b64   = models.TextField(blank=True, null=True)   # <-- NEW
+    is_favorite = models.BooleanField(default=False)
+    # Optionnel : stocker les notes résumées
+    notes_ids = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return self.title if self.title else f"Résumé {self.id}"

@@ -1,7 +1,8 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Note, Tag, Profile
+from .models import Note, Tag, Profile, Resume
+
 
 
 class SignUpForm(UserCreationForm):
@@ -151,3 +152,32 @@ class ProfileForm(forms.ModelForm):
         }
 
 
+
+# forms.py
+
+# forms.py
+
+class ResumeGenerateForm(forms.Form):
+    PERIOD_CHOICES = [
+        ('week', 'Cette semaine'),
+        ('month', 'Ce mois-ci'),
+        ('year', 'Cette année'),
+    ]
+
+    # Ajoute une option vide pour "Toutes les catégories"
+    CATEGORY_CHOICES = [
+        ('', 'Toutes les catégories'),  # ← Valeur vide = pas de filtre
+    ] + Note.CATEGORY_CHOICES  # ← Réutilise les mêmes que dans Note
+
+    period = forms.ChoiceField(
+        choices=PERIOD_CHOICES,
+        label="Période",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    category = forms.ChoiceField(
+        choices=CATEGORY_CHOICES,
+        required=False,
+        label="Catégorie",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
