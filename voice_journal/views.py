@@ -13,6 +13,7 @@ from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.views.decorators.http import require_POST
+from django.db.models import Count, Avg
 import requests
 from .models import VoiceJournal
 import time
@@ -685,6 +686,174 @@ def voice_journal_view(request):
 def voice_journal_list(request):
     """List all voice journal entries for the current user with filters"""
     voice_entries = VoiceJournal.objects.filter(user=request.user)
+    # Overall stats (unfiltered) for header
+    all_entries = VoiceJournal.objects.filter(user=request.user)
+    # Sentiment counts
+    raw_sent_counts = list(all_entries.values('text_sentiment').annotate(c=Count('id')))
+    sentiment_counts = {
+        (item['text_sentiment'] or '').strip().upper() or 'NEUTRAL': item['c'] for item in raw_sent_counts
+    }
+    # Emotion counts
+    raw_emo_counts = list(all_entries.values('audio_emotion').annotate(c=Count('id')))
+    emotion_counts = {
+        (item['audio_emotion'] or '').strip().lower() or 'neutral': item['c'] for item in raw_emo_counts
+    }
+    total_count = all_entries.count()
+    # Recent 7-day activity timeline and weekly stats
+    from datetime import date, timedelta
+    today = date.today()
+    last7 = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+    week_start = today - timedelta(days=6)
+    week_entries = all_entries.filter(created_at__date__gte=week_start)
+    # Totals per day
+    raw_by_day = list(all_entries.values('created_at__date').annotate(c=Count('id')))
+    by_day_map = {str(item['created_at__date']): item['c'] for item in raw_by_day}
+    timeline = []
+    max_day = 1
+    for d in last7:
+        key = str(d)
+        cnt = int(by_day_map.get(key, 0))
+        timeline.append({'date': d, 'count': cnt})
+        if cnt > max_day:
+            max_day = cnt
+    # Precompute bar heights in pixels for template simplicity
+    timeline_bars = []
+    for item in timeline:
+        ratio = (item['count'] / max_day) if max_day > 0 else 0
+        height_px = int(6 + ratio * 50)
+        timeline_bars.append({'date': item['date'], 'count': item['count'], 'height': height_px})
+
+    # Per-day sentiment counts and average scores for a richer chart
+    raw_day_sent = list(week_entries.values('created_at__date', 'text_sentiment').annotate(
+        c=Count('id'),
+        avg=Avg('text_sentiment_score')
+    ))
+    per_day_sent_map = {}
+    for row in raw_day_sent:
+        day = str(row['created_at__date'])
+        s = (row['text_sentiment'] or '').strip().upper() or 'NEUTRAL'
+        day_bucket = per_day_sent_map.setdefault(day, {
+            'POSITIVE': {'c': 0, 'avg': 0.0},
+            'NEUTRAL': {'c': 0, 'avg': 0.0},
+            'NEGATIVE': {'c': 0, 'avg': 0.0},
+        })
+        day_bucket[s]['c'] += int(row['c'] or 0)
+        # store/overwrite avg per sentiment (OK since grouped)
+        day_bucket[s]['avg'] = float(row.get('avg') or 0.0)
+
+    per_day_sentiments = []
+    max_pos = max_neu = max_neg = 0
+    per_day_bars = []
+    mood_line_vals = []  # signed mood index per day (-1..1)
+    for d in last7:
+        key = str(d)
+        vals = per_day_sent_map.get(key, {
+            'POSITIVE': {'c': 0, 'avg': 0.0},
+            'NEUTRAL': {'c': 0, 'avg': 0.0},
+            'NEGATIVE': {'c': 0, 'avg': 0.0},
+        })
+        per_day_sentiments.append({'date': d,
+                                   'POSITIVE': vals['POSITIVE']['c'],
+                                   'NEUTRAL': vals['NEUTRAL']['c'],
+                                   'NEGATIVE': vals['NEGATIVE']['c']})
+        if vals['POSITIVE']['c'] > max_pos: max_pos = vals['POSITIVE']['c']
+        if vals['NEUTRAL']['c'] > max_neu: max_neu = vals['NEUTRAL']['c']
+        if vals['NEGATIVE']['c'] > max_neg: max_neg = vals['NEGATIVE']['c']
+
+        # Determine dominant sentiment and intensity for horizontal bar
+        dom = 'NEUTRAL'
+        if vals['POSITIVE']['c'] >= vals['NEGATIVE']['c'] and vals['POSITIVE']['c'] > 0:
+            dom = 'POSITIVE'
+            intensity = vals['POSITIVE']['avg'] or 0.5
+        elif vals['NEGATIVE']['c'] > vals['POSITIVE']['c'] and vals['NEGATIVE']['c'] > 0:
+            dom = 'NEGATIVE'
+            intensity = vals['NEGATIVE']['avg'] or 0.5
+        else:
+            intensity = 0.2
+        # normalize 0..1 for width
+        width_pct = int(max(0, min(1, intensity)) * 100)
+        cls = 'pos' if dom == 'POSITIVE' else ('neg' if dom == 'NEGATIVE' else 'neu')
+        per_day_bars.append({
+            'date': d, 'label': d.strftime('%d'), 'dominant': dom, 'cls': cls, 'intensity': intensity, 'width': width_pct
+        })
+
+        # Signed mood index for line: pos avg - neg avg
+        mood_index = (vals['POSITIVE']['avg'] or 0.0) - (vals['NEGATIVE']['avg'] or 0.0)
+        # clamp -1..1
+        if mood_index > 1: mood_index = 1
+        if mood_index < -1: mood_index = -1
+        mood_line_vals.append(mood_index)
+
+    # Build SVG polyline points for sparkline (width=210, height=50)
+    width, height, margin = 210, 50, 2
+    step = (width - 2 * margin) / (max(1, len(last7) - 1))
+    def build_points(series_vals, vmax):
+        pts = []
+        for i, v in enumerate(series_vals):
+            x = margin + i * step
+            ratio = (v / vmax) if vmax > 0 else 0
+            y = margin + (1 - ratio) * (height - 2 * margin)
+            pts.append(f"{int(x)},{int(y)}")
+        return ' '.join(pts)
+
+    pos_vals = [d['POSITIVE'] for d in per_day_sentiments]
+    neu_vals = [d['NEUTRAL'] for d in per_day_sentiments]
+    neg_vals = [d['NEGATIVE'] for d in per_day_sentiments]
+
+    spark_pos = build_points(pos_vals, max_pos)
+    spark_neu = build_points(neu_vals, max_neu)
+    spark_neg = build_points(neg_vals, max_neg)
+
+    # Mood line from signed index (-1..1) mapped to 0..1 for plotting
+    def build_signed_points(vals):
+        pts = []
+        for i, v in enumerate(vals):
+            x = margin + i * step
+            ratio = (v + 1) / 2  # -1..1 to 0..1
+            y = margin + (1 - ratio) * (height - 2 * margin)
+            pts.append(f"{int(x)},{int(y)}")
+        return ' '.join(pts)
+    mood_line_points = build_signed_points(mood_line_vals)
+
+    # Weekly sentiment counts and summary
+    week_sent_counts = list(week_entries.values('text_sentiment').annotate(c=Count('id')))
+    week_counts = { (r['text_sentiment'] or '').upper(): r['c'] for r in week_sent_counts }
+    dom_week = max(['POSITIVE','NEUTRAL','NEGATIVE'], key=lambda k: week_counts.get(k, 0)) if week_entries.exists() else 'NEUTRAL'
+    emoji_map = {'POSITIVE': '😊', 'NEUTRAL': '😐', 'NEGATIVE': '😔'}
+    week_summary = {
+        'dominant': dom_week,
+        'emoji': emoji_map.get(dom_week, '😐')
+    }
+    # Peak positive day (by count)
+    peak_pos_day = None
+    max_pos_count = -1
+    peak_neg_day = None
+    max_neg_count = -1
+    peak_total_day = None
+    max_total_count = -1
+    for item in per_day_sentiments:
+        if item['POSITIVE'] > max_pos_count:
+            max_pos_count = item['POSITIVE']
+            peak_pos_day = item['date']
+        if item['NEGATIVE'] > max_neg_count:
+            max_neg_count = item['NEGATIVE']
+            peak_neg_day = item['date']
+        total_c = item['POSITIVE'] + item['NEUTRAL'] + item['NEGATIVE']
+        if total_c > max_total_count:
+            max_total_count = total_c
+            peak_total_day = item['date']
+
+    # Pie chart percentages (weekly)
+    week_total = sum(week_counts.get(k,0) for k in ['POSITIVE','NEUTRAL','NEGATIVE']) or 1
+    pie_pct = {
+        'positive': int(100 * week_counts.get('POSITIVE',0) / week_total),
+        'neutral': int(100 * week_counts.get('NEUTRAL',0) / week_total),
+        'negative': int(100 * week_counts.get('NEGATIVE',0) / week_total),
+    }
+
+    # If there are zero positives in the week, drop peak_pos_day to avoid confusion
+    if max_pos_count <= 0:
+        peak_pos_day = None
     
     # Get filter parameters
     search_query = request.GET.get('search', '').strip()
@@ -805,6 +974,25 @@ def voice_journal_list(request):
         'unique_emotions': unique_emotions,
         'active_sentiment_label': active_sentiment_label,
         'active_emotion_label': active_emotion_label,
+        # Stats
+        'stats_total': total_count,
+        'stats_sentiments': sentiment_counts,
+        'stats_emotions': emotion_counts,
+        'stats_timeline': timeline,
+        'stats_timeline_max': max_day,
+        'stats_timeline_bars': timeline_bars,
+        'stats_series_points': {
+            'positive': spark_pos,
+            'neutral': spark_neu,
+            'negative': spark_neg,
+        },
+        'stats_week_summary': week_summary,
+        'stats_peak_positive_day': peak_pos_day,
+        'stats_peak_negative_day': peak_neg_day,
+        'stats_peak_total_day': peak_total_day,
+        'stats_per_day_bars': per_day_bars,
+        'stats_mood_line_points': mood_line_points,
+        'stats_pie_pct': pie_pct,
     }
     return render(request, 'voice_journal/voice_journal_list.html', context)
 
