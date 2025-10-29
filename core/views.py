@@ -7,11 +7,15 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
 import json
+import logging
 
-from .forms import SignUpForm, NoteForm, SearchForm
-from .models import Note, Tag
+from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm
+from .models import Note, Tag, Profile
 from .ai_utils import analyze_note
 from .search_utils import index_note, remove_note_from_index, search_notes
+from .face_utils import compare_with_users
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -99,7 +103,7 @@ def note_detail(request, pk):
 def note_create(request):
     """Create a new note."""
     if request.method == 'POST':
-        form = NoteForm(request.POST)
+        form = NoteForm(request.POST, request.FILES)
         if form.is_valid():
             note = form.save(commit=False)
             note.user = request.user
@@ -167,7 +171,7 @@ def note_edit(request, pk):
     note = get_object_or_404(Note, pk=pk, user=request.user)
 
     if request.method == 'POST':
-        form = NoteForm(request.POST, instance=note)
+        form = NoteForm(request.POST, request.FILES, instance=note)
         if form.is_valid():
             note = form.save(commit=False)
 
@@ -398,3 +402,66 @@ def note_export_json(request):
     response['Content-Disposition'] = f'attachment; filename="mindlens_notes_{timezone.now().strftime("%Y%m%d")}.json"'
 
     return response
+
+
+@login_required
+def detect_faces_in_note(request, pk):
+    """Détecte les visages dans l'image d'une note"""
+    note = get_object_or_404(Note, pk=pk, user=request.user)
+    
+    if not note.image:
+        return JsonResponse({'error': 'Cette note ne contient pas d\'image'}, status=400)
+    
+    logger.info(f"Détection des visages pour la note {pk}")
+    logger.info(f"Chemin de l'image: {note.image.path}")
+    logger.info(f"URL de l'image: {note.image.url}")
+    
+    try:
+        results = compare_with_users(note.image.path)
+        logger.info(f"Résultats trouvés: {results}")
+        
+        return JsonResponse({
+            'success': True,
+            'faces': results
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de la détection: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+# ============ PROFILE VIEWS ============
+
+@login_required
+def profile_view(request):
+    # Créer le profil s'il n'existe pas
+    Profile.objects.get_or_create(user=request.user)
+    
+    if request.method == 'POST':
+        form = ProfileForm(
+            request.POST, 
+            request.FILES, 
+            instance=request.user.profile
+        )
+        
+        if form.is_valid():
+            # Mettre à jour le profil
+            form.save()
+            
+            # Mettre à jour les informations de l'utilisateur
+            user = request.user
+            user.username = request.POST.get('username')
+            user.email = request.POST.get('email')
+            user.save()
+            
+            messages.success(request, "Profil mis à jour avec succès !")
+            return redirect('profile')
+    else:
+        form = ProfileForm(instance=request.user.profile)
+
+    return render(request, 'profile.html', {
+        'form': form,
+        'user': request.user
+    })

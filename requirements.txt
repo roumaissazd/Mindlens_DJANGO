@@ -11,6 +11,10 @@ scipy
 safetensors
 sentencepiece
 whoosh
+deepface
+opencv-python
+retina-face
+pillow
 
 # LLM for intelligent voice agent (FREE)
 groq
