@@ -188,12 +188,126 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
             results.append({
                 'title': 'Recommended music',
                 'url': f'https://www.youtube.com/watch?v={vid}',
-                'thumbnail': None,
+                # Use robust thumbnail path; default.jpg can 404, prefer hqdefault.jpg
+                'thumbnail': f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
                 'videoId': vid,
                 # Use standard youtube embed to avoid player config error 153
                 'embedUrl': f'https://www.youtube.com/embed/{vid}'
             })
     return results[:3]
+
+
+def get_jamendo_music_recommendations(emotion: str) -> list[dict]:
+    """Return up to 3 Jamendo tracks with direct audio preview URLs.
+    Requires JAMENDO_CLIENT_ID in settings. Tags are mapped from emotion.
+    """
+    client_id = getattr(settings, 'JAMENDO_CLIENT_ID', '')
+    if not client_id:
+        return []
+    # Map moods to Jamendo tags to steer the vibe of recommendations
+    tag_map = {
+        'happy': 'happy,upbeat,energetic,motivational',
+        'excited': 'energetic,upbeat,workout,motivational',
+        'sad': 'piano,melancholic,calm,soothing',
+        'calm': 'ambient,chill,calm,lofi',
+        'stressed': 'relax,calm,meditation,soothing',
+        'neutral': 'lofi,chill,ambient'
+    }
+    tags = tag_map.get((emotion or 'neutral').lower(), 'lofi,chill')
+    try:
+        print(f"[Jamendo] Fetching tracks for emotion='{emotion}', tags='{tags}'")
+        def fetch(params: dict) -> list[dict]:
+            resp = requests.get('https://api.jamendo.com/v3.0/tracks', params=params, timeout=8)
+            resp.raise_for_status()
+            data = resp.json()
+            out: list[dict] = []
+            for item in (data.get('results') or [])[:3]:
+                title = item.get('name') or 'Music'
+                audio_url = item.get('audio') or ''
+                web_url = item.get('shareurl') or ''
+                img = ((item.get('album_image') or '') or '').replace('http://', 'https://')
+                if not audio_url:
+                    continue
+                out.append({
+                    'title': title,
+                    'url': web_url,
+                    'thumbnail': img,
+                    'audioUrl': audio_url,
+                    'provider': 'jamendo'
+                })
+            print(f"[Jamendo] Got {len(out)} results for params keys={list(params.keys())}")
+            return out
+
+        import random
+        base = {
+            'client_id': client_id,
+            'format': 'json',
+            'limit': 3,
+            'audioformat': 'mp31',
+            'include': 'musicinfo',
+            'order': 'popularity_total',
+            # randomize offset to avoid always returning the same top results
+            'offset': random.randint(0, 30)
+        }
+        # Pass 1: fuzzy tags from emotion
+        results = fetch({**base, 'fuzzytags': tags})
+        if results:
+            return results
+        # Pass 2: broader search queries tailored per mood
+        mood_queries = {
+            'happy': ['happy', 'upbeat', 'energetic', 'motivational'],
+            'excited': ['energetic', 'upbeat', 'dance', 'workout'],
+            'sad': ['piano', 'soothing', 'melancholic', 'calm'],
+            'calm': ['ambient', 'chill', 'lofi', 'relax'],
+            'stressed': ['relaxation', 'meditation', 'calm', 'breathing'],
+            'neutral': ['lofi', 'chill', 'focus', 'ambient']
+        }
+        for query in mood_queries.get((emotion or 'neutral').lower(), ['lofi', 'chill', 'ambient']):
+            print(f"[Jamendo] Fallback query='{query}'")
+            results = fetch({**base, 'search': query})
+            if results:
+                return results
+        return []
+    except Exception:
+        print("[Jamendo] Error while fetching tracks", flush=True)
+        return []
+
+
+def get_music_recommendations(emotion: str) -> list[dict]:
+    """Return YouTube fallback videos instantly (no API calls to avoid lag)."""
+    emotion_key = (emotion or 'neutral').lower()
+    vids = MOOD_FALLBACK_VIDEOS.get(emotion_key) or MOOD_FALLBACK_VIDEOS['neutral']
+    results = []
+    for vid in vids[:3]:
+        results.append({
+            'title': 'Musique apaisante',
+            'url': f'https://www.youtube.com/watch?v={vid}',
+            'thumbnail': f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
+            'videoId': vid,
+            'embedUrl': f'https://www.youtube.com/embed/{vid}'
+        })
+    print(f"[Music] Fast recommendations count={len(results)} for emotion='{emotion_key}'")
+    return results
+
+
+def get_music_recommendations_cached(request, emotion: str) -> list[dict]:
+    """Return fast YouTube fallback (no API, no cache needed)."""
+    return get_music_recommendations(emotion)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_music_recommendations(request):
+    """Return music recommendations for a given mood quickly (used to avoid blocking UI)."""
+    try:
+        mood = (request.POST.get('mood') or request.body.decode('utf-8') or '').strip().lower()
+        if not mood:
+            return JsonResponse({'music': []})
+        music = get_music_recommendations_cached(request, mood)
+        return JsonResponse({'music': music})
+    except Exception as e:
+        print(f"[MusicAPI] error: {e}")
+        return JsonResponse({'music': []})
 
 # Initialize models (cache them to avoid reloading)
 _asr_pipeline = None
@@ -822,7 +936,8 @@ def process_audio(request):
             final_mood = decide_mood(audio_emotion, text_sentiment)
             ai_message = generate_ai_message(final_mood)
             theme = EMOTION_TO_THEME.get(final_mood, EMOTION_TO_THEME['neutral'])
-            music = get_youtube_music_recommendations(final_mood)
+            # Do not block on music here; fetch asynchronously on client
+            music = []
 
             # Clean up temporary file
             default_storage.delete(temp_path)
@@ -928,7 +1043,8 @@ def api_analyze_voice(request):
         final_mood = decide_mood(audio_emotion, text_sentiment)
         ai_message = generate_ai_message(final_mood)
         theme = EMOTION_TO_THEME.get(final_mood, EMOTION_TO_THEME['neutral'])
-        music = get_youtube_music_recommendations(final_mood)
+        # Non-blocking: let client fetch music via /voice-journal/api/music/
+        music = []
 
         return JsonResponse({
             'emotion': final_mood,
@@ -973,13 +1089,16 @@ def api_voice_agent_turn(request):
                 'mood': final_mood,
             }
             request.session.modified = True
-            music = get_youtube_music_recommendations(final_mood)
+            music = get_music_recommendations(final_mood)
+            # Do not send preview on start; only show when user asks for music
+            preview = None
             return JsonResponse({
                 'success': True,
                 'mood': final_mood,
                 'user_text': '',
                 'reply_text': opening,
                 'music': music,
+                'preview': preview,
             })
 
         if 'audio' not in request.FILES:
@@ -1078,7 +1197,8 @@ def api_voice_agent_turn(request):
 
             # Handle music playback
             if topic == 'music':
-                vids = state.get('vids') or get_youtube_music_recommendations(mood_s)
+                vids = state.get('vids') or get_music_recommendations_cached(request, mood_s)
+                print(f"[MusicTopic] vids_count={len(vids) if vids else 0}, step={step}")
                 step = int(state.get('step') or 0)
                 play_full = bool(state.get('play_full'))
 
@@ -1134,7 +1254,7 @@ def api_voice_agent_turn(request):
                 text_lower = text.lower()
                 if 'musique' in text_lower or 'music' in text_lower:
                     # User wants music
-                    vids = get_youtube_music_recommendations(mood_s)
+                    vids = get_music_recommendations_cached(request, mood_s)
                     if vids:
                         state_next = {'topic': 'music', 'step': 0, 'mood': mood_s, 'vids': vids}
                         return "Extrait musical.", state_next, False, intent
@@ -1232,13 +1352,20 @@ def api_voice_agent_turn(request):
         preview = None
         ns = request.session.get('agent_state') or {}
         if ns.get('topic') == 'music':
-            vids = ns.get('vids') or get_youtube_music_recommendations(final_mood)
+            vids = ns.get('vids') or []
             step = int(ns.get('step') or 0)
             play_full = bool(ns.get('play_full'))
             if vids and step < len(vids):
                 vid = vids[step]
                 embed = (vid.get('embedUrl') or '')
-                if embed:
+                audio = (vid.get('audioUrl') or '')
+                if audio:
+                    print(f"[MusicTopic] Building preview for track step={step}, has_audio={bool(audio)}, has_embed={bool(embed)}")
+                    preview = {
+                        'title': vid.get('title') or 'Extrait musical',
+                        'audioUrl': audio,
+                    }
+                elif embed:
                     # Strip any existing params to avoid duplicates
                     base_embed = embed.split('?', 1)[0]
                     # Safe params: avoid jsapi/origin; show controls for easier interaction
@@ -1257,7 +1384,7 @@ def api_voice_agent_turn(request):
                         'embedUrl': embed,
                     }
 
-        music = get_youtube_music_recommendations(final_mood)
+        music = get_music_recommendations(final_mood)
 
         return JsonResponse({
             'success': True,

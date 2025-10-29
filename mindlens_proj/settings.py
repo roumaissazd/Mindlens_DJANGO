@@ -153,3 +153,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Groq API Key (for LLM functionality)
 GROQ_API_KEY = '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'
+JAMENDO_CLIENT_ID='f0c35346'

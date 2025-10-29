@@ -10,5 +10,6 @@ urlpatterns = [
 	path('process-audio/', views.process_audio, name='process_audio'),
 	path('api/analyze-voice/', views.api_analyze_voice, name='api_analyze_voice'),
 	path('api/voice-agent-turn/', views.api_voice_agent_turn, name='api_voice_agent_turn'),
+	path('api/music/', views.api_music_recommendations, name='api_music'),
 ]
 
