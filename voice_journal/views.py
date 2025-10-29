@@ -155,7 +155,10 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
                 'maxResults': 3,
                 'type': 'video',
                 'key': api_key,
-                'safeSearch': 'moderate'
+                'safeSearch': 'moderate',
+                # Prefer videos that allow embedding and are syndicated
+                'videoEmbeddable': 'true',
+                'videoSyndicated': 'true'
             }
             resp = requests.get('https://www.googleapis.com/youtube/v3/search', params=params, timeout=8)
             resp.raise_for_status()
@@ -164,6 +167,9 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
                 vid = item.get('id', {}).get('videoId')
                 snippet = item.get('snippet', {})
                 if not vid:
+                    continue
+                # Skip live or upcoming streams which often fail to embed
+                if (snippet.get('liveBroadcastContent') or '').lower() in {'live', 'upcoming'}:
                     continue
                 results.append({
                     'title': snippet.get('title', 'Music'),
@@ -184,7 +190,8 @@ def get_youtube_music_recommendations(emotion: str) -> list[dict]:
                 'url': f'https://www.youtube.com/watch?v={vid}',
                 'thumbnail': None,
                 'videoId': vid,
-                'embedUrl': f'https://www.youtube-nocookie.com/embed/{vid}?rel=0&modestbranding=1&iv_load_policy=3'
+                # Use standard youtube embed to avoid player config error 153
+                'embedUrl': f'https://www.youtube.com/embed/{vid}'
             })
     return results[:3]
 
@@ -403,20 +410,25 @@ Reste naturel, pas robotique. Réponds comme tu penserais si c'était un ami qui
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",  # Free, fast model
             messages=messages,
-            max_tokens=100,
+            max_tokens=160,
             temperature=0.7,
         )
         
         reply = response.choices[0].message.content.strip()
         
-        # Post-processing to keep it short
-        if len(reply) > 80:
-            # Try to cut at a sentence boundary
-            sentences = reply.split('. ')
-            if len(sentences) > 1:
-                reply = sentences[0] + '.'
+        # Post-processing: keep concise without cutting mid-sentence
+        max_len = 140
+        if len(reply) > max_len:
+            cut = reply[:max_len]
+            # Prefer ending at sentence punctuation within the window
+            punct_positions = [cut.rfind(p) for p in ['.', '!', '?', '…']]
+            best_punct = max(punct_positions)
+            if best_punct >= 60:  # ensure it's a reasonably complete sentence
+                reply = cut[:best_punct + 1]
             else:
-                reply = reply[:80] + '...'
+                # fallback: cut at last space and add ellipsis
+                last_space = cut.rfind(' ')
+                reply = (cut[:last_space] if last_space > 0 else cut).rstrip() + '…'
         
         return reply
         
@@ -1066,9 +1078,53 @@ def api_voice_agent_turn(request):
 
             # Handle music playback
             if topic == 'music':
-                # Let LLM handle the conversation during music playback
+                vids = state.get('vids') or get_youtube_music_recommendations(mood_s)
+                step = int(state.get('step') or 0)
+                play_full = bool(state.get('play_full'))
+
+                t_lower = (text or '').lower()
+                wants_next = any(k in t_lower for k in ['suivant', 'autre', 'next', 'skip', 'changer'])
+                wants_full = any(k in t_lower for k in ['entier', 'complet', 'full'])
+
+                # Positive confirmation -> accept current music and go back to support flow
+                if intent == 'yes' and not wants_next and not wants_full:
+                    state_next = {
+                        'topic': 'support',
+                        'step': 0,
+                        'mood': mood_s,
+                        'history': state.get('history', [])
+                    }
+                    reply = "Super. Est-ce que tu as besoin d'autre chose ?"
+                    return reply, state_next, False, intent
+
+                # Negative or ask to change -> advance to next track if any
+                if intent == 'no' or wants_next:
+                    if vids and step + 1 < len(vids):
+                        state['step'] = step + 1
+                        state['play_full'] = False
+                        reply = "D'accord, je te propose un autre extrait. Dis-moi si ça te convient."
+                        return reply, state, False, intent
+                    else:
+                        # No more tracks; return to support with a question
+                        state_next = {'topic': 'support', 'step': 0, 'mood': mood_s}
+                        reply = (
+                            "Je n'ai plus d'extraits pour l'instant. Souhaites-tu autre chose, "
+                            "comme discuter ou un exercice de respiration ?"
+                        )
+                        return reply, state_next, False, intent
+
+                # Ask to play the full version
+                if wants_full:
+                    state['play_full'] = True
+                    reply = "Très bien, je lance la version complète. Dis-moi quand arrêter."
+                    return reply, state, False, intent
+
+                # Default while in music topic: keep conversation light but focused on music feedback
                 conversation_history = state.get('history', [])
-                reply = generate_llm_reply(text, mood_s, conversation_history)
+                guidance = (
+                    "Réponds brièvement et demande si la musique convient, propose 'suivant' ou 'version complète'."
+                )
+                reply = generate_llm_reply(f"{text}\n{guidance}", mood_s, conversation_history)
                 return reply, state, False, intent
 
             # Support mode - mostly handled by LLM
@@ -1178,12 +1234,24 @@ def api_voice_agent_turn(request):
         if ns.get('topic') == 'music':
             vids = ns.get('vids') or get_youtube_music_recommendations(final_mood)
             step = int(ns.get('step') or 0)
+            play_full = bool(ns.get('play_full'))
             if vids and step < len(vids):
                 vid = vids[step]
                 embed = (vid.get('embedUrl') or '')
                 if embed:
-                    joiner = '&' if '?' in embed else '?'
-                    embed = f"{embed}{joiner}autoplay=1&start=0&end=15&mute=0&modestbranding=1"
+                    # Strip any existing params to avoid duplicates
+                    base_embed = embed.split('?', 1)[0]
+                    # Safe params: avoid jsapi/origin; show controls for easier interaction
+                    params_base = (
+                        "autoplay=1&mute=1&playsinline=1&controls=1&modestbranding=1&rel=0&iv_load_policy=3"
+                    )
+                    embed = base_embed
+                    joiner = '?' if '?' not in embed else '&'
+                    if play_full:
+                        embed = f"{embed}{joiner}{params_base}"
+                    else:
+                        # 15s preview window
+                        embed = f"{embed}{joiner}{params_base}&start=0&end=15"
                     preview = {
                         'title': vid.get('title') or 'Musique apaisante',
                         'embedUrl': embed,
