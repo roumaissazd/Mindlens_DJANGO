@@ -31,8 +31,10 @@ urlpatterns = [
     path('resumes/', views.resume_list, name='resume_list'),
     path('resumes/<int:pk>/', views.resume_detail, name='resume_detail'),
     path('resumes/generate/', views.resume_generate, name='resume_generate'),
-    path('resume/<int:pk>/edit/', views.resume_edit, name='resume_edit'),
-    path('resumes/<int:pk>/delete/', views.resume_delete, name='resume_delete'),  # FIXED
+    path('resumes/<int:pk>/edit/', views.resume_edit, name='resume_edit'),  # FIXED
+    path('resumes/<int:pk>/delete/', views.resume_delete, name='resume_delete'),
+    path('resumes/<int:pk>/toggle_favorite/', views.resume_toggle_favorite, name='resume_toggle_favorite'),  # ⭐ Favori AJAX
+    path('resumes/search/', views.resume_search, name='resume_search'),  # 🔍 Recherche
 ]
 
 

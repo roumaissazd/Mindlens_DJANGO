@@ -3,12 +3,13 @@ AI utilities for note analysis using Hugging Face transformers.
 Includes sentiment analysis, category classification, and tag generation.
 """
 import base64
-from transformers import pipeline
+from transformers import pipeline, T5ForConditionalGeneration, T5Tokenizer
 import logging
 from io import BytesIO
 from gtts import gTTS
 from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
+import torch
 
 logger = logging.getLogger(__name__)
 DetectorFactory.seed = 0
@@ -256,6 +257,7 @@ def analyze_note(text):
 
 
 
+# Cache global pour éviter de recharger le modèle à chaque appel
 def get_summarizer():
     """
     Initialise le pipeline de résumé IA uniquement à la demande.
@@ -306,6 +308,8 @@ from langdetect.lang_detect_exception import LangDetectException
 
 # make results deterministic (optional but nice)
 DetectorFactory.seed = 0
+
+
 
 
 def _detect_language(text: str) -> str:
@@ -362,27 +366,26 @@ def text_to_speech_base64(text: str, lang: str | None = None) -> str:
     
 
 
-    _title_generator = None
 
 _title_generator = None
 
 def get_title_generator():
-    global _title_generator
+    """Générateur de titre français – MODÈLE ROBUSTE (T5)"""
+    global _title_generator, _title_tokenizer
     if _title_generator is None:
+        logger.info("Chargement du générateur de titre français (T5)...")
         try:
-            _title_generator = pipeline(
-                "text2text-generation",
-                model="moussaKam/barthez-base-french-summarization",
-                max_length=32,
-                min_length=8,
-                do_sample=False,
-                truncation=True,
-            )
-            logger.info("Title generator pipeline loaded")
+            ckpt = "plguillou/t5-base-fr-sum-cnndm"  # Modèle français SANS BUG
+            _title_tokenizer = T5Tokenizer.from_pretrained(ckpt)
+            _title_generator = T5ForConditionalGeneration.from_pretrained(ckpt)
+            device = 0 if torch.cuda.is_available() else 'cpu'
+            _title_generator.to(device)
+            logger.info("Générateur de titre français (T5) chargé !")
         except Exception as e:
-            logger.error(f"Title generator failed: {e}")
+            logger.error(f"Échec chargement titre: {e}")
             _title_generator = None
-    return _title_generator
+            _title_tokenizer = None
+    return _title_generator, _title_tokenizer
 
 
 def generate_summary_title(

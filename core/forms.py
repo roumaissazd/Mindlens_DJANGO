@@ -134,16 +134,21 @@ class SearchForm(forms.Form):
 
 
 
+# forms.py
+
 class ResumeGenerateForm(forms.Form):
     PERIOD_CHOICES = [
         ('week', 'Cette semaine'),
         ('month', 'Ce mois'),
-        ('all', 'Toutes les notes')
+        ('year', 'Cette année'),
     ]
-
-    period = forms.ChoiceField(choices=PERIOD_CHOICES, required=True, label="Période")
-    category = forms.ChoiceField(
-        choices=[('', 'Toutes les catégories')] + Note.CATEGORY_CHOICES,
+    period = forms.ChoiceField(
+        choices=PERIOD_CHOICES,
         required=False,
-        label="Catégorie"
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    category = forms.CharField(
+        max_length=50,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-select', 'placeholder': 'ex: famille, travail...'})
     )

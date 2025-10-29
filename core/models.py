@@ -130,6 +130,10 @@ class Note(models.Model):
     
     
 
+
+    
+
+    
 class Resume(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=255, blank=True, null=True)
@@ -137,8 +141,7 @@ class Resume(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     audio_b64   = models.TextField(blank=True, null=True)   # <-- NEW
-    notes_ids  = models.JSONField(default=list)  # NEW: Store note IDs
-
+    is_favorite = models.BooleanField(default=False)
     # Optionnel : stocker les notes résumées
     notes_ids = models.JSONField(default=list, blank=True)
 

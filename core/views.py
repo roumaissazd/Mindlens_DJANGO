@@ -7,6 +7,8 @@ from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import Q
+
 import json
 
 from .forms import SignUpForm, NoteForm, SearchForm, ResumeGenerateForm
@@ -403,6 +405,7 @@ def note_export_json(request):
     return response
 
  #Resume
+# ============ RESUMES VIEWS ============
 
 @login_required
 def resume_generate(request):
@@ -456,17 +459,53 @@ def resume_generate(request):
 
 @login_required
 def resume_list(request):
-    """Afficher tous les résumés de l’utilisateur connecté."""
+    """Afficher tous les résumés avec filtres, stats et recherche."""
     resumes = Resume.objects.filter(author=request.user).order_by('-created_at')
-    return render(request, 'resumes/resume_list.html', {'resumes': resumes})
 
+    # === FILTRES ===
+    current_period = request.GET.get('period')
+    current_category = request.GET.get('category')
+
+    if current_period:
+        now = timezone.now()
+        if current_period == 'week':
+            resumes = resumes.filter(created_at__gte=now - timedelta(days=7))
+        elif current_period == 'month':
+            resumes = resumes.filter(created_at__gte=now - timedelta(days=30))
+        elif current_period == 'year':
+            resumes = resumes.filter(created_at__year=now.year)
+
+    if current_category:
+        resumes = resumes.filter(category=current_category)
+
+    # === STATS ===
+    stats = {
+        'total': Resume.objects.filter(author=request.user).count(),
+        'this_week': Resume.objects.filter(
+            author=request.user,
+            created_at__gte=timezone.now() - timedelta(days=7)
+        ).count(),
+        'this_month': Resume.objects.filter(
+            author=request.user,
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).count(),
+    }
+
+    context = {
+        'resumes': resumes,
+        'stats': stats,
+        'current_period': current_period,
+        'current_category': current_category,
+    }
+
+    return render(request, 'resumes/resume_list.html', context)
 
 
 @login_required
 def resume_detail(request, pk):
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
 
-    # Generate audio on-the-fly if missing (or re-generate on edit)
+    # Generate audio on-the-fly if missing
     if not resume.audio_b64:
         resume.audio_b64 = text_to_speech_base64(resume.content)
         resume.save(update_fields=['audio_b64'])
@@ -476,6 +515,7 @@ def resume_detail(request, pk):
         'audio_b64': resume.audio_b64,
     }
     return render(request, 'resumes/resume_detail.html', context)
+
 
 @login_required
 def resume_edit(request, pk):
@@ -487,17 +527,14 @@ def resume_edit(request, pk):
             messages.error(request, "Le résumé ne peut pas être vide.")
         else:
             resume.content = new_content
-            # Re-generate TTS audio (your function already detects language)
             resume.audio_b64 = text_to_speech_base64(new_content)
             resume.save()
             messages.success(request, "Résumé mis à jour avec succès !")
         return redirect('resume_detail', pk=resume.pk)
 
-    # GET → show edit form
-    context = {
-        "resume": resume,
-    }
+    context = { "resume": resume }
     return render(request, "resumes/resume_edit.html", context)
+
 
 @login_required
 def resume_delete(request, pk):
@@ -506,6 +543,72 @@ def resume_delete(request, pk):
     if request.method == "POST":
         resume.delete()
         messages.success(request, "Résumé supprimé avec succès.")
-        return redirect('resume_list')   # plain name, no namespace
+        return redirect('resume_list')
 
-    return redirect('resume_list')  # GET → just go back
+    # GET → redirige vers la liste (ou affiche confirmation)
+    return redirect('resume_list')
+
+
+@login_required
+def resume_toggle_favorite(request, pk):
+    """AJAX: Toggle favori."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False}, status=400)
+
+    resume = get_object_or_404(Resume, pk=pk, author=request.user)
+    resume.is_favorite = not resume.is_favorite
+    resume.save()
+
+    return JsonResponse({
+        'success': True,
+        'is_favorite': resume.is_favorite
+    })
+
+
+
+
+@login_required
+def resume_search(request):
+    query = request.GET.get('q', '').strip()
+    period = request.GET.get('period', '')
+    category = request.GET.get('category', '')
+
+    resumes = Resume.objects.filter(author=request.user)
+
+    # Filtres
+    if period:
+        now = timezone.now()
+        if period == 'week':
+            resumes = resumes.filter(created_at__gte=now - timedelta(days=7))
+        elif period == 'month':
+            resumes = resumes.filter(created_at__gte=now - timedelta(days=30))
+        elif period == 'year':
+            resumes = resumes.filter(created_at__year=now.year)
+
+    if category:
+        resumes = resumes.filter(category=category)
+
+
+
+    results = resumes.distinct().order_by('-created_at')
+
+    # Catégories pour le select
+    categories = [
+        ('famille', 'Famille'),
+        ('travail', 'Travail'),
+        ('voyage', 'Voyage'),
+        ('sante', 'Santé'),
+        ('amour', 'Amour'),
+        ('loisirs', 'Loisirs'),
+        ('reflexion', 'Réflexion'),
+    ]
+
+    context = {
+        'results': results,
+        'query': query,
+        'period': period,
+        'category': category,
+        'categories': categories,
+    }
+
+    return render(request, 'resumes/resume_search.html', context)
