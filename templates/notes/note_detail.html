@@ -81,44 +81,50 @@
             </button>
           </div>
           
-          <!-- Ajouter le CSS -->
+          <!-- Modifier la partie CSS -->
           <style>
             .face-box {
-              position: absolute;
-              border: 2px solid #4A90E2;
-              pointer-events: none;
-              transition: all 0.3s ease;
-              background: rgba(74, 144, 226, 0.1);
+                position: absolute;
+                border: 2px solid #4A90E2;
+                pointer-events: none;
+                transition: all 0.3s ease;
+                background: rgba(74, 144, 226, 0.1);
             }
             
             .face-tag {
-              position: absolute;
-              background: rgba(74, 144, 226, 0.9);
-              color: white;
-              padding: 4px 8px;
-              border-radius: 4px;
-              font-size: 12px;
-              pointer-events: none;
-              opacity: 0;
-              transition: opacity 0.3s ease;
-              white-space: nowrap;
+                position: absolute;
+                background: rgba(74, 144, 226, 0.9);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                pointer-events: none;
+                white-space: nowrap;
+                /* Supprimer opacity: 0 pour que le tag soit toujours visible */
+                /* Ajouter un style pour le texte */
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+                /* Ajouter une bordure pour meilleure visibilité */
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                /* Ajouter un effet de flou pour un style moderne */
+                backdrop-filter: blur(4px);
             }
             
-            .face-box:hover + .face-tag {
-              opacity: 1;
-            }
+            /* Supprimer le hover puisque nous voulons que le tag soit toujours visible */
+            /* .face-box:hover + .face-tag {
+                opacity: 1;
+            } */
             
             #detectFacesBtn {
-              margin-top: 10px;
+                margin-top: 10px;
             }
             
             .image-container {
-              position: relative;
-              display: inline-block;
+                position: relative;
+                display: inline-block;
             }
           </style>
 
-          <!-- Ajouter le JavaScript -->
+          <!-- Modifier la partie JavaScript pour ajouter l'animation -->
           <script>
             document.getElementById('detectFacesBtn').addEventListener('click', async function() {
                 try {
@@ -154,13 +160,44 @@
                             
                             const tag = document.createElement('div');
                             tag.className = 'face-tag';
-                            tag.textContent = `${face.username} (${Math.round(face.confidence)}%)`;
+                            
+                            // Vérifier si la confiance est inférieure à 40%
+                            if (face.confidence < 40) {
+                                tag.textContent = `Inconnu 👤`;
+                                box.style.border = '2px solid #FFA500'; // Orange pour les inconnus
+                                tag.style.background = 'rgba(255, 165, 0, 0.9)'; // Orange semi-transparent
+                            } else {
+                                tag.textContent = `${face.username} (${Math.round(face.confidence)}%)`;
+                                box.style.border = '2px solid #4A90E2'; // Bleu pour les personnes reconnues
+                                tag.style.background = 'rgba(74, 144, 226, 0.9)'; // Bleu semi-transparent
+                            }
+                            
                             tag.style.left = `${face.location.left / scaleX}px`;
-                            tag.style.top = `${(face.location.top / scaleY) - 25}px`;
+                            tag.style.top = `${(face.location.bottom / scaleY) + 5}px`; // Placer le tag sous le cadre
+                            
+                            // Ajouter une animation d'apparition
+                            box.style.animation = 'fadeIn 0.5s ease-out';
+                            tag.style.animation = 'fadeIn 0.5s ease-out';
                             
                             overlay.appendChild(box);
                             overlay.appendChild(tag);
                         });
+
+                        // Style pour l'animation reste le même
+                        const style = document.createElement('style');
+                        style.textContent = `
+                            @keyframes fadeIn {
+                                from {
+                                    opacity: 0;
+                                    transform: translateY(-10px);
+                                }
+                                to {
+                                    opacity: 1;
+                                    transform: translateY(0);
+                                }
+                            }
+                        `;
+                        document.head.appendChild(style);
                     } else {
                         console.error("Erreur:", data.error);
                     }
