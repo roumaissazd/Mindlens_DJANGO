@@ -13,8 +13,7 @@ import json
 
 from .forms import SignUpForm, NoteForm, SearchForm, ResumeGenerateForm
 from .models import Note, Tag, Resume
-from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64, generate_summary_title  
-
+from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64 
 from .search_utils import index_note, remove_note_from_index, search_notes
 from django.contrib import messages
 
@@ -418,7 +417,6 @@ def resume_generate(request):
 
         notes = Note.objects.filter(user=request.user)
 
-        # --- FILTERS -------------------------------------------------
         now = timezone.now()
         if period == 'week':
             notes = notes.filter(created_at__gte=now - timedelta(days=7))
@@ -430,21 +428,14 @@ def resume_generate(request):
         notes_contents = [note.content for note in notes]
 
         if notes_contents:
-            # 1. Summary
             summary_text = generate_summary_from_notes(notes_contents)
 
-            # 2. AI TITLE (new!)
-            ai_title = generate_summary_title(
-                notes_contents,
-                period=period,
-                category=category
-            )
-
-            # 3. Final title (AI + date)
+            # Titre simple et clair (sans IA)
+            period_label = "la semaine" if period == "week" else "le mois"
+            category_label = f" ({category})" if category else ""
             date_str = now.strftime("%d/%m/%Y")
-            final_title = f"{ai_title} ({date_str})"
+            final_title = f"Résumé de {period_label}{category_label} - {date_str}"
 
-            # 4. Save
             generated_resume = Resume.objects.create(
                 author=request.user,
                 title=final_title,
@@ -457,12 +448,11 @@ def resume_generate(request):
         "generated_resume": generated_resume
     })
 
+
 @login_required
 def resume_list(request):
-    """Afficher tous les résumés avec filtres, stats et recherche."""
     resumes = Resume.objects.filter(author=request.user).order_by('-created_at')
 
-    # === FILTRES ===
     current_period = request.GET.get('period')
     current_category = request.GET.get('category')
 
@@ -478,17 +468,10 @@ def resume_list(request):
     if current_category:
         resumes = resumes.filter(category=current_category)
 
-    # === STATS ===
     stats = {
         'total': Resume.objects.filter(author=request.user).count(),
-        'this_week': Resume.objects.filter(
-            author=request.user,
-            created_at__gte=timezone.now() - timedelta(days=7)
-        ).count(),
-        'this_month': Resume.objects.filter(
-            author=request.user,
-            created_at__gte=timezone.now() - timedelta(days=30)
-        ).count(),
+        'this_week': Resume.objects.filter(author=request.user, created_at__gte=timezone.now() - timedelta(days=7)).count(),
+        'this_month': Resume.objects.filter(author=request.user, created_at__gte=timezone.now() - timedelta(days=30)).count(),
     }
 
     context = {
@@ -497,7 +480,6 @@ def resume_list(request):
         'current_period': current_period,
         'current_category': current_category,
     }
-
     return render(request, 'resumes/resume_list.html', context)
 
 
@@ -505,16 +487,14 @@ def resume_list(request):
 def resume_detail(request, pk):
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
 
-    # Generate audio on-the-fly if missing
     if not resume.audio_b64:
         resume.audio_b64 = text_to_speech_base64(resume.content)
         resume.save(update_fields=['audio_b64'])
 
-    context = {
+    return render(request, 'resumes/resume_detail.html', {
         'resume': resume,
         'audio_b64': resume.audio_b64,
-    }
-    return render(request, 'resumes/resume_detail.html', context)
+    })
 
 
 @login_required
@@ -532,39 +512,28 @@ def resume_edit(request, pk):
             messages.success(request, "Résumé mis à jour avec succès !")
         return redirect('resume_detail', pk=resume.pk)
 
-    context = { "resume": resume }
-    return render(request, "resumes/resume_edit.html", context)
+    return render(request, "resumes/resume_edit.html", {"resume": resume})
 
 
 @login_required
 def resume_delete(request, pk):
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
-
     if request.method == "POST":
         resume.delete()
         messages.success(request, "Résumé supprimé avec succès.")
         return redirect('resume_list')
-
-    # GET → redirige vers la liste (ou affiche confirmation)
     return redirect('resume_list')
 
 
 @login_required
 def resume_toggle_favorite(request, pk):
-    """AJAX: Toggle favori."""
     if request.method != 'POST':
         return JsonResponse({'success': False}, status=400)
 
     resume = get_object_or_404(Resume, pk=pk, author=request.user)
     resume.is_favorite = not resume.is_favorite
     resume.save()
-
-    return JsonResponse({
-        'success': True,
-        'is_favorite': resume.is_favorite
-    })
-
-
+    return JsonResponse({'success upholstery': True, 'is_favorite': resume.is_favorite})
 
 
 @login_required
@@ -575,7 +544,6 @@ def resume_search(request):
 
     resumes = Resume.objects.filter(author=request.user)
 
-    # Filtres
     if period:
         now = timezone.now()
         if period == 'week':
@@ -588,27 +556,17 @@ def resume_search(request):
     if category:
         resumes = resumes.filter(category=category)
 
-
-
     results = resumes.distinct().order_by('-created_at')
 
-    # Catégories pour le select
     categories = [
-        ('famille', 'Famille'),
-        ('travail', 'Travail'),
-        ('voyage', 'Voyage'),
-        ('sante', 'Santé'),
-        ('amour', 'Amour'),
-        ('loisirs', 'Loisirs'),
-        ('reflexion', 'Réflexion'),
+        ('famille', 'Famille'), ('travail', 'Travail'), ('voyage', 'Voyage'),
+        ('sante', 'Santé'), ('amour', 'Amour'), ('loisirs', 'Loisirs'), ('reflexion', 'Réflexion')
     ]
 
-    context = {
+    return render(request, 'resumes/resume_search.html', {
         'results': results,
         'query': query,
         'period': period,
         'category': category,
         'categories': categories,
-    }
-
-    return render(request, 'resumes/resume_search.html', context)
+    })

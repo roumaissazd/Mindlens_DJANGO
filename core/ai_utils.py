@@ -3,12 +3,13 @@ AI utilities for note analysis using Hugging Face transformers.
 Includes sentiment analysis, category classification, and tag generation.
 """
 import base64
-from transformers import pipeline, T5ForConditionalGeneration, T5Tokenizer
+from transformers import pipeline
 import logging
 from io import BytesIO
 from gtts import gTTS
 from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
+from typing import List, Dict, Any
 import torch
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ DetectorFactory.seed = 0
 # Global pipelines (loaded once for performance)
 _sentiment_pipeline = None
 _zero_shot_pipeline = None
+_summarizer = None
 
 
 def get_sentiment_pipeline():
@@ -256,75 +258,62 @@ def analyze_note(text):
 
 
 
-
-# Cache global pour éviter de recharger le modèle à chaque appel
+# =========================================================
+# 6. SUMMARIZATION
+# =========================================================
 def get_summarizer():
-    """
-    Initialise le pipeline de résumé IA uniquement à la demande.
-    Cela évite le téléchargement du modèle au démarrage de Django.
-    """
-    return pipeline("summarization", model="facebook/bart-large-cnn")
+    global _summarizer
+    if _summarizer is None:
+        try:
+            _summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+            logger.info("Summarizer loaded.")
+        except Exception as e:
+            logger.error(f"Error loading summarizer: {e}")
+            _summarizer = None
+    return _summarizer
 
-def generate_summary_from_notes(notes_contents, chunk_size=1000, max_summary_length=150):
-    """
-    Génère un résumé à partir d'une liste de textes (notes).
-    
-    notes_contents : list de str
-    chunk_size : nombre de caractères par chunk
-    max_summary_length : longueur max pour chaque chunk résumé
-    """
+
+def generate_summary_from_notes(
+    notes_contents: List[str],
+    chunk_size: int = 1000,
+    max_summary_length: int = 150
+) -> str:
     if not notes_contents:
         return "Aucune note à résumer."
 
     summarizer = get_summarizer()
-    full_text = " ".join(notes_contents)
+    if not summarizer:
+        return "Résumé indisponible (modèle non chargé)."
 
-    # Découper le texte en chunks
-    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
-    
-    final_summary = ""
-    
+    full_text = " ".join(notes_contents)
+    chunks = [full_text[i:i + chunk_size] for i in range(0, len(full_text), chunk_size)]
+
+    final_summary = []
     for chunk in chunks:
         try:
             result = summarizer(
-                chunk, 
-                max_length=max_summary_length, 
-                min_length=50, 
+                chunk,
+                max_length=max_summary_length,
+                min_length=50,
                 do_sample=False
             )
-            final_summary += result[0]['summary_text'] + " "
+            final_summary.append(result[0]['summary_text'])
         except Exception as e:
-            # En cas d'erreur sur un chunk, ignorer et continuer
-            final_summary += ""
-            print(f"Erreur IA chunk: {e}")
+            logger.warning(f"Summary chunk failed: {e}")
 
-    return final_summary.strip()
-
-# --------------------------------------------------------------
-#  NEW: language-aware TTS → base64 MP3
-# --------------------------------------------------------------
-from langdetect import detect, DetectorFactory
-from langdetect.lang_detect_exception import LangDetectException
-
-# make results deterministic (optional but nice)
-DetectorFactory.seed = 0
+    return " ".join(final_summary).strip()
 
 
-
-
+# =========================================================
+# 7. TEXT-TO-SPEECH (base64 MP3)
+# =========================================================
 def _detect_language(text: str) -> str:
-    """
-    Detect language code (ISO-639-1) of the first non-empty line.
-    Returns 'fr' as safe default.
-    """
-    # gTTS only needs the first part of the text for detection
     sample = text.strip()[:500]
     if not sample:
         return "fr"
 
     try:
         code = detect(sample)
-        # gTTS supports only a subset of codes → map the most common ones
         mapping = {
             "fr": "fr", "en": "en", "es": "es", "de": "de", "it": "it",
             "pt": "pt", "nl": "nl", "ru": "ru", "zh-cn": "zh-CN",
@@ -336,115 +325,18 @@ def _detect_language(text: str) -> str:
 
 
 def text_to_speech_base64(text: str, lang: str | None = None) -> str:
-    """
-    Convert *text* → MP3 → base64 string.
-    If *lang* is None → auto-detect language.
-    """
     if not text.strip():
         return ""
 
-    # --------------------------------------------------
-    # 1. Choose language
-    # --------------------------------------------------
-    if lang is None:
-        lang = _detect_language(text)          # ← auto-detect
-    else:
-        # keep user-provided code, but normalise a bit
-        lang = lang.lower().split("-")[0]
+    lang = lang or _detect_language(text)
+    lang = lang.lower().split("-")[0]
 
     try:
         tts = gTTS(text=text, lang=lang, slow=False)
         buffer = BytesIO()
         tts.write_to_fp(buffer)
         buffer.seek(0)
-        b64 = base64.b64encode(buffer.read()).decode()
-        logger.info(f"TTS generated – lang:{lang}")
-        return b64
+        return base64.b64encode(buffer.read()).decode()
     except Exception as e:
         logger.error(f"TTS error (lang={lang}): {e}")
         return ""
-    
-
-
-
-_title_generator = None
-
-def get_title_generator():
-    """Générateur de titre français – MODÈLE ROBUSTE (T5)"""
-    global _title_generator, _title_tokenizer
-    if _title_generator is None:
-        logger.info("Chargement du générateur de titre français (T5)...")
-        try:
-            ckpt = "plguillou/t5-base-fr-sum-cnndm"  # Modèle français SANS BUG
-            _title_tokenizer = T5Tokenizer.from_pretrained(ckpt)
-            _title_generator = T5ForConditionalGeneration.from_pretrained(ckpt)
-            device = 0 if torch.cuda.is_available() else 'cpu'
-            _title_generator.to(device)
-            logger.info("Générateur de titre français (T5) chargé !")
-        except Exception as e:
-            logger.error(f"Échec chargement titre: {e}")
-            _title_generator = None
-            _title_tokenizer = None
-    return _title_generator, _title_tokenizer
-
-
-def generate_summary_title(
-    notes_contents: list[str],
-    period: str,
-    category: str | None = None,
-    max_words: int = 10
-) -> str:
-    full_text = " ".join(notes_contents)[:1500]
-
-    # Sentiment
-    sentiment = analyze_sentiment(full_text)
-    sentiment_word = ""
-    if sentiment:
-        mood = suggest_mood(sentiment["label"])
-        sentiment_word = {"joyeux": "positif", "triste": "négatif", "neutre": ""}.get(mood, "")
-
-    # Category fallback
-    if not category:
-        cat_res = classify_category(full_text)
-        category = cat_res["category"] if cat_res else None
-
-    # Tags
-    tags = generate_tags(full_text, max_tags=3)
-    key_phrase = " ".join(tags[:2]).strip()
-
-    # AI generation
-    prompt = (
-        f"Résume en une phrase courte et accrocheuse les notes suivantes : "
-        f"{' '.join(notes_contents)[:800]}. "
-        f"Thème principal : {key_phrase or 'divers'}. "
-        f"Sentiment : {sentiment_word or 'neutre'}."
-    )
-
-    generator = get_title_generator()
-    if generator:
-        try:
-            result = generator(prompt, num_return_sequences=1)[0]["generated_text"]
-            title = result.strip().split("\n")[0].split(".")[0].split("!")[0].split("?")[0].strip()
-            words = title.split()
-            if len(words) > max_words:
-                title = " ".join(words[:max_words]) + "…"
-            if title:
-                return title
-        except Exception as e:
-            logger.warning(f"AI title failed: {e}")
-
-    # Fallback
-    parts = []
-    if sentiment_word:
-        parts.append(sentiment_word.capitalize())
-    if key_phrase:
-        parts.append(key_phrase.capitalize())
-    if category:
-        parts.append(category.capitalize())
-    if period == "week":
-        parts.append("de la semaine")
-    elif period == "month":
-        parts.append("du mois")
-
-    fallback = " ".join(p for p in parts if p) or "Résumé"
-    return fallback
