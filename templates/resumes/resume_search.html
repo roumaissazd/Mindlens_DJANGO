@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recherche Résumés – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="search-container">
+    <div class="container">
+      <!-- Header -->
+      <div class="search-header">
+        <h1 class="search-title">Recherche Résumés</h1>
+        <a href="{% url 'resume_list' %}" class="breadcrumb-link">Retour aux résumés</a>
+      </div>
+
+      <!-- Search Form -->
+      <div class="search-form-card">
+        <form method="get" class="advanced-search-form">
+          <div class="search-form-grid">
+            <!-- Text Search -->
+            <div class="form-group search-main">
+              <label for="id_q" class="form-label">Rechercher dans titre, contenu, tags...</label>
+              <input type="text" name="q" id="id_q" value="{{ query }}" placeholder="ex: famille, travail, vacances..." class="search-input" />
+            </div>
+
+            <!-- Filters Row -->
+            <div class="search-filters-row">
+              <div class="form-group">
+                <label class="form-label">Période</label>
+                <select name="period" class="form-select">
+                  <option value="">Toutes</option>
+                  <option value="week" {% if period == 'week' %}selected{% endif %}>Cette semaine</option>
+                  <option value="month" {% if period == 'month' %}selected{% endif %}>Ce mois</option>
+                  <option value="year" {% if period == 'year' %}selected{% endif %}>Cette année</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Catégorie</label>
+                <select name="category" class="form-select">
+                  <option value="">Toutes</option>
+                  {% for value, label in categories %}
+                    <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="search-actions">
+            <button type="submit" class="btn-primary">Rechercher</button>
+            <a href="{% url 'resume_search' %}" class="btn-secondary">Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Results -->
+      {% if query or period or category %}
+        <div class="search-results-section">
+          <div class="results-header">
+            <h2 class="results-title">
+              {% if results %}
+                {{ results|length }} résultat{{ results|length|pluralize }}
+                {% if query %}pour "{{ query }}"{% endif %}
+              {% else %}
+                Aucun résultat
+                {% if query %}pour "{{ query }}"{% endif %}
+              {% endif %}
+            </h2>
+          </div>
+
+          {% if results %}
+            <div class="notes-grid">
+              {% for resume in results %}
+                <article class="note-card">
+                  <div class="note-card-header">
+                    <div class="note-meta">
+                      {% if resume.period %}
+                        <span class="note-badge category-{{ resume.period }}">
+                          {{ resume.get_period_display }}
+                        </span>
+                      {% endif %}
+                      {% if resume.category %}
+                        <span class="note-badge category-{{ resume.category }}">
+                          {{ resume.get_category_display }}
+                        </span>
+                      {% endif %}
+                    </div>
+                    <button class="btn-favorite {% if resume.is_favorite %}active{% endif %}"
+                            data-resume-id="{{ resume.id }}"
+                            title="{% if resume.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}">
+                      <i class="fas fa-star"></i>
+                    </button>
+                  </div>
+                  
+                  <a href="{% url 'resume_detail' resume.pk %}" class="note-link">
+                    <h3 class="note-title">{{ resume.title }}</h3>
+                    <p class="note-excerpt">{{ resume.content|truncatewords:30 }}</p>
+                  </a>
+                  
+                  <div class="note-footer">
+                    <div class="note-tags">
+                      {% for tag in resume.auto_tags.tags|slice:":3" %}
+                        <span class="tag tag-auto">{{ tag }}</span>
+                      {% endfor %}
+                    </div>
+                    <div class="note-date">
+                      {{ resume.created_at|date:"d/m/Y" }}
+                    </div>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <h3 class="empty-title">Aucun résultat trouvé</h3>
+              <p class="empty-text">Essayez avec d'autres mots-clés ou filtres</p>
+            </div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="search-tips">
+          <h3 class="tips-title">Conseils de recherche</h3>
+          <ul class="tips-list">
+            <li>Recherchez dans le titre, le contenu ou les tags</li>
+            <li>Utilisez les filtres pour affiner par période ou catégorie</li>
+            <li>La recherche est insensible à la casse</li>
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script src="{% static 'js/notes.js' %}"></script>
+  <script>
+    // Favori AJAX
+    document.querySelectorAll('.btn-favorite').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const id = this.dataset.resumeId;
+        fetch(`/resumes/${id}/toggle_favorite/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({})
+        })
+        .then(() => this.classList.toggle('active'));
+      });
+    });
+  </script>
+</body>
+</html>

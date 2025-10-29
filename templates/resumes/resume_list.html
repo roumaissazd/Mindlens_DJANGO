@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mes Résumés – MindLense</title>
+  <link rel="stylesheet" href="{% static 'css/home.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}" />
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main class="notes-container">
+    <div class="container">
+      <!-- Header Section -->
+      <div class="notes-header">
+        <div class="notes-header-content">
+          <h1 class="notes-title">Mes Résumés</h1>
+          <p class="notes-subtitle">Revivez vos moments clés en un clin d'œil</p>
+        </div>
+        <div class="notes-header-actions">
+          <a href="{% url 'resume_generate' %}" class="btn-primary btn-create">
+            Générer un Résumé
+          </a>
+        
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: var(--color-primary);">Total</div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Résumés totaux</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: var(--color-accent);"></div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.this_week }}</div>
+            <div class="stat-label">Cette semaine</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: var(--color-secondary);"></div>
+          <div class="stat-content">
+            <div class="stat-value">{{ stats.this_month }}</div>
+            <div class="stat-label">Ce mois</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters Section -->
+      <div class="filters-section">
+        <div class="filters-header">
+          <h3 class="filters-title">Filtres</h3>
+          {% if current_period or current_category %}
+            <a href="{% url 'resume_list' %}" class="btn-clear-filters">Effacer les filtres</a>
+          {% endif %}
+        </div>
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label class="filter-label">Période</label>
+            <div class="filter-buttons">
+              <a href="{% url 'resume_list' %}" class="filter-btn {% if not current_period %}active{% endif %}">Toutes</a>
+              <a href="?period=week" class="filter-btn {% if current_period == 'week' %}active{% endif %}">Cette semaine</a>
+              <a href="?period=month" class="filter-btn {% if current_period == 'month' %}active{% endif %}">Ce mois</a>
+              <a href="?period=year" class="filter-btn {% if current_period == 'year' %}active{% endif %}">Cette année</a>
+            </div>
+          </div>
+          <div class="filter-group">
+           
+          </div>
+        </div>
+        <div class="search-box">
+          <form action="{% url 'resume_search' %}" method="get" class="search-form">
+            <input type="text" name="q" placeholder="Rechercher dans vos résumés..." class="search-input" />
+            <button type="submit" class="btn-search">Rechercher</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Resumes Grid -->
+      {% if resumes %}
+        <div class="notes-grid">
+          {% for resume in resumes %}
+            <article class="note-card" data-resume-id="{{ resume.id }}">
+              <div class="note-card-header">
+                <div class="note-meta">
+                  {% if resume.period %}
+                    <span class="note-badge category-{{ resume.period }}">
+                      {{ resume.get_period_display }}
+                    </span>
+                  {% endif %}
+                  {% if resume.category %}
+                    <span class="note-badge category-{{ resume.category }}">
+                      {{ resume.get_category_display }}
+                    </span>
+                  {% endif %}
+                </div>
+                <button class="btn-favorite {% if resume.is_favorite %}active{% endif %}"
+                        data-resume-id="{{ resume.id }}"
+                        title="{% if resume.is_favorite %}Retirer des favoris{% else %}Ajouter aux favoris{% endif %}">
+                  <i class="fas fa-star"></i>
+                </button>
+              </div>
+              
+              <a href="{% url 'resume_detail' resume.pk %}" class="note-link">
+                <h3 class="note-title">
+                  {{ resume.title|default:"Résumé sans titre" }}
+                </h3>
+                <p class="note-excerpt">{{ resume.content|truncatewords:30 }}</p>
+              </a>
+              
+              <div class="note-footer">
+                <div class="note-tags">
+                  {% for tag in resume.auto_tags|slice:":3" %}
+                    <span class="tag tag-auto">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+                <div class="note-date">
+                  {{ resume.created_at|date:"d/m/Y" }}
+                </div>
+              </div>
+              
+              {% if resume.sentiment_label %}
+                <div class="note-sentiment">
+                  <span class="sentiment-badge sentiment-{{ resume.sentiment_label|slugify }}">
+                    {{ resume.get_sentiment_emoji }} {{ resume.sentiment_label }}
+                  </span>
+                </div>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon"></div>
+          <h3 class="empty-title">Aucun résumé pour le moment</h3>
+          <p class="empty-text">Générez votre premier résumé intelligent !</p>
+          <a href="{% url 'resume_generate' %}" class="btn-primary">
+            Générer un résumé
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </main>
+
+  <!-- Modal de suppression -->
+  <div id="deleteModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h3>Supprimer ce résumé ?</h3>
+      <p id="modal-text">Êtes-vous sûr de vouloir supprimer ce résumé ?</p>
+      <form id="deleteForm" method="POST">
+        {% csrf_token %}
+        <div class="modal-actions">
+          <button type="submit" class="btn-confirm">Oui, supprimer</button>
+          <button type="button" class="btn-cancel">Annuler</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% include 'partials/footer.html' %}
+
+  <script src="{% static 'js/notes.js' %}"></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Modal de suppression
+    const deleteButtons = document.querySelectorAll('.btn-delete');
+    const modal = document.getElementById('deleteModal');
+    const modalText = document.getElementById('modal-text');
+    const deleteForm = document.getElementById('deleteForm');
+    const cancelBtn = modal.querySelector('.btn-cancel');
+
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const resumeId = btn.dataset.resumeId;
+        const resumeTitle = btn.dataset.resumeTitle || 'ce résumé';
+        modalText.textContent = `Êtes-vous sûr de vouloir supprimer "${resumeTitle}" ?`;
+        deleteForm.action = `/resumes/${resumeId}/delete/`;
+        modal.style.display = 'flex';
+      });
+    });
+
+    cancelBtn.addEventListener('click', () => modal.style.display = 'none');
+    window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+    // Favori via AJAX (si tu as un endpoint)
+    document.querySelectorAll('.btn-favorite').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const resumeId = this.dataset.resumeId;
+        fetch(`/resumes/${resumeId}/toggle_favorite/`, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' },
+        })
+        .then(() => this.classList.toggle('active'));
+      });
+    });
+  </script>
+</body>
+</html>
