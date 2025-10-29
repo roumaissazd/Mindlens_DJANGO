@@ -17,6 +17,9 @@ ENV/
 staticfiles/
 media/
 
+# Search indexes (generated)
+whoosh_index/
+
 # OS
 .DS_Store
 Thumbs.db

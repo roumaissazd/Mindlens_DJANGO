@@ -53,6 +53,27 @@ except Exception as e:
     ML_MISSING_MODULES.append(f"librosa/numpy ({e})")
 try:
     from pydub import AudioSegment  # type: ignore
+    # Best-effort: configure ffmpeg/ffprobe paths for pydub (esp. on Windows)
+    try:
+        from pydub.utils import which  # type: ignore
+        ffmpeg_bin = (
+            os.environ.get('FFMPEG_BINARY')
+            or os.environ.get('FFMPEG_PATH')
+            or which('ffmpeg')
+        )
+        ffprobe_bin = (
+            os.environ.get('FFPROBE_BINARY')
+            or os.environ.get('FFPROBE_PATH')
+            or which('ffprobe')
+        )
+        if ffmpeg_bin:
+            AudioSegment.converter = ffmpeg_bin
+            AudioSegment.ffmpeg = ffmpeg_bin  # backwards compat attr
+        if ffprobe_bin:
+            AudioSegment.ffprobe = ffprobe_bin
+    except Exception as _e:
+        # Non-fatal; conversion will fail later with a clearer error message
+        print(f"[Audio] FFmpeg autodetect warning: {_e}")
 except Exception as e:
     ML_LIBRARIES_AVAILABLE = False
     ML_MISSING_MODULES.append(f"pydub ({e})")
@@ -652,6 +673,13 @@ def convert_to_wav(audio_file):
         return None
         
     try:
+        # Ensure ffmpeg is available to pydub
+        ffmpeg_path = getattr(AudioSegment, 'converter', None)
+        if not ffmpeg_path:
+            raise FileNotFoundError(
+                "ffmpeg introuvable. Ajoutez ffmpeg\\bin au PATH, ou définissez FFMPEG_BINARY="
+                "'C:\\chemin\\vers\\ffmpeg.exe' (Windows) / '/usr/bin/ffmpeg' (Linux)."
+            )
         # Detect input format by extension and read
         ext = os.path.splitext(str(audio_file))[-1].lower().lstrip('.')
         fmt = None
@@ -672,7 +700,11 @@ def convert_to_wav(audio_file):
         
         return wav_buffer
     except Exception as e:
-        print(f"Error converting audio: {e}")
+        try:
+            dbg_ffmpeg = getattr(AudioSegment, 'converter', None)
+        except Exception:
+            dbg_ffmpeg = None
+        print(f"Error converting audio: {e} | ffmpeg={dbg_ffmpeg}")
         return None
 
 
