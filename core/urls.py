@@ -30,6 +30,7 @@ urlpatterns = [
 
     # Détection de visages
     path('notes/<int:pk>/detect-faces/', views.detect_faces_in_note, name='detect_faces_in_note'),
+    path('api/unread-reminders/', views.api_unread_reminders, name='api_unread_reminders'),
 ]
 
 

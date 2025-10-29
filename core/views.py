@@ -8,7 +8,8 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 import logging
-
+from .ai_utils import create_reminder_from_analysis
+from .models import Note, Tag, Profile, Reminder
 from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm
 from .models import Note, Tag, Profile
 from .ai_utils import analyze_note
@@ -149,11 +150,16 @@ def note_create(request):
                     )
                     note.tags.add(tag)
 
-            # Index the note for search
+          # Index the note for search
             index_note(note)
 
-            messages.success(request, "Note créée avec succès ! 🎉")
+            # IA : créer un reminder intelligent
+            create_reminder_from_analysis(note, analysis)
+
+            messages.success(request, "Note créée avec succès !")
             return redirect('note_detail', pk=note.pk)
+
+           
     else:
         form = NoteForm()
 
@@ -216,11 +222,15 @@ def note_edit(request, pk):
             else:
                 # If no manual tags provided, clear them
                 note.tags.clear()
-
+           
             # Re-index the note
             index_note(note)
 
-            messages.success(request, "Note mise à jour avec succès ! ✅")
+            # Recréer le reminder si contenu changé
+            if 'content' in form.changed_data:
+                create_reminder_from_analysis(note, analysis)
+
+            messages.success(request, "Note mise à jour avec succès !")
             return redirect('note_detail', pk=note.pk)
     else:
         form = NoteForm(instance=note)
@@ -465,3 +475,25 @@ def profile_view(request):
         'form': form,
         'user': request.user
     })
+@login_required
+def api_unread_reminders(request):
+    reminders = Reminder.objects.filter(
+        user=request.user,
+        is_read=False,
+        trigger_at__lte=timezone.now()
+    ).order_by('-priority', 'trigger_at')[:8]
+
+    data = {
+        'count': reminders.count(),
+        'reminders': [
+            {
+                'id': r.id,
+                'message': r.message,
+                'priority': r.priority,
+                'url': reverse('note_detail', args=[r.note.pk]),
+                'time': r.trigger_at.strftime('%H:%M')
+            }
+            for r in reminders
+        ]
+    }
+    return JsonResponse(data)

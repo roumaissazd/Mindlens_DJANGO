@@ -157,3 +157,25 @@ def create_user_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
+
+
+class Reminder(models.Model):
+    PRIORITY_CHOICES = [
+        ('haute', 'Haute'),
+        ('moyenne', 'Moyenne'),
+        ('basse', 'Basse'),
+    ]
+
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='reminders')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    message = models.TextField()
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES)
+    trigger_at = models.DateTimeField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-priority', '-trigger_at']
+
+    def __str__(self):
+        return f"{self.get_priority_display()} - {self.message[:30]}"

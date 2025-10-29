@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Note, Tag, Profile  # Ajoutez Profile ici
-
+from .models import Reminder
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
@@ -60,3 +60,4 @@ class NoteAdmin(admin.ModelAdmin):
 class ProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'photo_user']
     search_fields = ['user__username']
+admin.site.register(Reminder)

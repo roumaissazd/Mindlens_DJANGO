@@ -5,7 +5,9 @@ Includes sentiment analysis, category classification, and tag generation.
 
 from transformers import pipeline
 import logging
-
+from .models import Reminder
+from django.utils import timezone
+from datetime import timedelta
 logger = logging.getLogger(__name__)
 
 # Global pipelines (loaded once for performance)
@@ -249,3 +251,62 @@ def analyze_note(text):
         'suggested_mood': suggested_mood
     }
 
+def create_reminder_from_analysis(note, analysis):
+  
+    try:
+        sentiment = analysis.get('sentiment', {})
+        category = analysis.get('category', {})
+        tags = analysis.get('tags', [])
+        mood = analysis.get('suggested_mood', '')
+
+        priority = 'basse'
+        delay_hours = 24
+
+        # 1. Sentiment négatif
+        sentiment_label = sentiment.get('label', '').lower()
+        if 'négatif' in sentiment_label:
+            priority = 'haute'
+            delay_hours = 1
+
+        # 2. Catégorie santé ou travail
+        cat = category.get('category', '').lower()
+        if cat in ['santé', 'travail']:
+            priority = 'moyenne'
+            delay_hours = 6
+
+        # 3. Tags urgents
+        urgent_keywords = ['médecin', 'rdv', 'urgent', 'deadline', 'oublié', 'demain', 'aujourd’hui', 'maintenant']
+        text_lower = note.content.lower()
+        if any(kw in text_lower for kw in urgent_keywords):
+            priority = 'haute'
+            delay_hours = 0.001  # 1 minute pour test
+
+        # Pas d'urgence → pas de rappel
+        if priority == 'basse':
+            logger.info("Aucun rappel créé : pas d'urgence détectée")
+            return None
+
+        # Message court
+        preview = note.content[:50].strip()
+        if len(note.content) > 50:
+            preview += '...'
+        message = f"{cat.capitalize() if cat else 'Note'} : {preview}"
+
+        # Créer ou mettre à jour
+        reminder, created = Reminder.objects.update_or_create(
+            note=note,
+            user=note.user,
+            defaults={
+                'message': message,
+                'priority': priority,
+                'trigger_at': timezone.now() + timedelta(hours=delay_hours),
+                'is_read': False
+            }
+        )
+        action = 'créé' if created else 'mis à jour'
+        logger.info(f"Reminder {action} : {reminder} (priorité: {priority}, dans {delay_hours}h)")
+        return reminder
+
+    except Exception as e:
+        logger.error(f"Erreur reminder: {e}")
+        return None
