@@ -63,6 +63,13 @@
             font-size: 14px;
             font-weight: 600;
         }
+
+        .voice-entry-title {
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
         
         .voice-entry-actions {
             display: flex;
@@ -346,7 +353,7 @@
                         <div class="filter-group">
                             <label for="search">🔍 Recherche</label>
                             <input type="text" id="search" name="search" value="{{ search_query }}" 
-                                   placeholder="Rechercher dans les transcriptions..." class="search-input">
+                                   placeholder="Rechercher par titre ou transcription..." class="search-input">
                         </div>
                         
                         <!-- Filtre par sentiment -->
@@ -435,6 +442,9 @@
                         <div class="voice-entry-header">
                             <div class="voice-entry-date">
                                 {{ entry.created_at|date:"d F Y à H:i" }}
+                                {% if entry.title %}
+                                <div class="voice-entry-title">{{ entry.title }}</div>
+                                {% endif %}
                             </div>
                             <div class="voice-entry-actions">
                                 <a href="{% url 'voice_journal_detail' entry.pk %}" class="action-btn view">Voir</a>
@@ -497,5 +507,6 @@
     </main>
 
     {% include 'partials/footer.html' %}
+    
 </body>
 </html>

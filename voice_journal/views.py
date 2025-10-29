@@ -12,6 +12,7 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.conf import settings
+from django.views.decorators.http import require_POST
 import requests
 from .models import VoiceJournal
 import time
@@ -695,7 +696,10 @@ def voice_journal_list(request):
     
     # Apply filters
     if search_query:
-        voice_entries = voice_entries.filter(transcription__icontains=search_query)
+        from django.db.models import Q
+        voice_entries = voice_entries.filter(
+            Q(title__icontains=search_query) | Q(transcription__icontains=search_query)
+        )
     
     if sentiment_filter:
         # Normalize the filter value for comparison
@@ -821,6 +825,23 @@ def voice_journal_detail(request, pk):
 
 
 @login_required
+@require_POST
+def voice_journal_update_title(request, pk):
+    """Update title of a voice journal entry (AJAX)."""
+    try:
+        entry = VoiceJournal.objects.get(pk=pk, user=request.user)
+    except VoiceJournal.DoesNotExist:
+        return JsonResponse({'success': False, 'error': "Introuvable"}, status=404)
+    title = (request.POST.get('title') or '').strip()
+    # Hard limit in view as well
+    if len(title) > 120:
+        title = title[:120]
+    entry.title = title
+    entry.save(update_fields=['title'])
+    return JsonResponse({'success': True, 'title': entry.title})
+
+
+@login_required
 def voice_journal_delete(request, pk):
     """Delete a voice journal entry"""
     try:
@@ -925,6 +946,7 @@ def process_audio(request):
             voice_entry = VoiceJournal.objects.create(
                 user=request.user,
                 audio_file=wav_path,
+                title='',
                 transcription=transcription,
                 text_sentiment=text_sentiment,
                 text_sentiment_score=text_sentiment_score,
