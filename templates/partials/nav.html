@@ -101,15 +101,15 @@
 
           // Charger les rappels
           function loadNotifications() {
-          fetch('{% url "api_unread_reminders" %}')
+            fetch('{% url "api_unread_reminders" %}')
               .then(r => r.json())
-            .then(data => {
+              .then(data => {
                 modalList.innerHTML = '';
                 badge.textContent = data.count;
                 badge.style.opacity = data.count > 0 ? '1' : '0';
 
                 if (data.count > 0) {
-                data.reminders.forEach(r => {
+                  data.reminders.forEach(r => {
                     const color = r.priority === 'haute' ? '#e53e3e' : r.priority === 'moyenne' ? '#dd6b20' : '#718096';
                     modalList.innerHTML += `
                       <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1.5rem;border-bottom:1px solid #f3f4f6;">
@@ -124,9 +124,9 @@
                           Delete
                         </button>
                       </div>
-                  `;
-                });
-              } else {
+                    `;
+                  });
+                } else {
                   modalList.innerHTML = '<div style="padding:1.5rem;text-align:center;color:#a0aec0;">Aucune notification</div>';
                 }
               });
