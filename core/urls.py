@@ -31,8 +31,10 @@ urlpatterns = [
     # Détection de visages
     path('notes/<int:pk>/detect-faces/', views.detect_faces_in_note, name='detect_faces_in_note'),
     path('api/unread-reminders/', views.api_unread_reminders, name='api_unread_reminders'),
+    path('notifications/', views.notification_list, name='notification_list'),
+    path('reminder/<int:pk>/delete/', views.delete_reminder, name='delete_reminder'),
 
-
+path('api/generate-title/', views.api_generate_title, name='api_generate_title'),
   # Resume
     path('resumes/', views.resume_list, name='resume_list'),
     path('resumes/<int:pk>/', views.resume_detail, name='resume_detail'),

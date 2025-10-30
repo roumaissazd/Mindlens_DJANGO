@@ -9,6 +9,10 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Q
+from .ai_utils import translate_note_mymemory
+from .ai_utils import generate_title
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 import json
 import logging
@@ -673,3 +677,47 @@ def resume_search(request):
         'category': category,
         'categories': categories,
     })
+
+@login_required
+def translate_note_view(request, pk):
+    note = get_object_or_404(Note, pk=pk, user=request.user)
+    
+    if request.method == 'POST':
+        target = request.POST.get('target_language', 'en')
+        success = translate_note_mymemory(note, target)
+        if success:
+            messages.success(request, f"Traduit en {target.upper()} !")
+        else:
+            messages.error(request, "Erreur traduction (MyMemory).")
+    
+    return redirect('note_detail', pk=note.pk)
+    # core/views.py (ajoute cette vue)
+@login_required
+def notification_list(request):
+    """Liste complète des notifications (rappels) de l'utilisateur."""
+    reminders = Reminder.objects.filter(user=request.user).order_by('-priority', '-trigger_at')
+    
+    context = {
+        'reminders': reminders,
+        'title': 'Toutes les Notifications',
+    }
+    return render(request, 'notes/notification_list.html', context)
+
+
+@login_required
+def delete_reminder(request, pk):
+    """Supprime une notification (AJAX)."""
+    if request.method == 'POST':
+        reminder = get_object_or_404(Reminder, pk=pk, user=request.user)
+        reminder.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
+
+@api_view(['POST'])
+def api_generate_title(request):
+    text = request.data.get('content', '').strip()
+    if not text:
+        return Response({"error": "Contenu requis"}, status=400)
+    
+    title = generate_title(text)
+    return Response({"title": title})

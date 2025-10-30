@@ -5,6 +5,7 @@ import json
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from django.utils.timezone import localtime
 
 
 class Tag(models.Model):
@@ -78,6 +79,7 @@ class Note(models.Model):
     auto_tags = models.JSONField(default=dict, blank=True)
     sentiment_score = models.FloatField(null=True, blank=True)
     sentiment_label = models.CharField(max_length=50, blank=True)
+    auto_title_generated = models.BooleanField(default=False, verbose_name="Titre généré automatiquement par IA")
 
     # Manual tags
     tags = models.ManyToManyField(Tag, blank=True, related_name='notes')
@@ -159,6 +161,7 @@ def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 
+
 class Reminder(models.Model):
     PRIORITY_CHOICES = [
         ('haute', 'Haute'),
@@ -166,8 +169,8 @@ class Reminder(models.Model):
         ('basse', 'Basse'),
     ]
 
-    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='reminders')
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    note = models.ForeignKey('Note', on_delete=models.CASCADE, related_name='reminders')
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
     message = models.TextField()
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES)
     trigger_at = models.DateTimeField()
@@ -175,10 +178,14 @@ class Reminder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-priority', '-trigger_at']
+        ordering = ['is_read', '-priority', '-trigger_at']
 
     def __str__(self):
         return f"{self.get_priority_display()} - {self.message[:30]}"
+
+    @property
+    def formatted_time(self):
+        return localtime(self.trigger_at).strftime("%d/%m/%Y %H:%M")
     
     
 
@@ -199,3 +206,5 @@ class Resume(models.Model):
 
     def __str__(self):
         return self.title if self.title else f"Résumé {self.id}"
+
+
