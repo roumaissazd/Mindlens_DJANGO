@@ -20,7 +20,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 import re
 from transformers import pipeline
-
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 logger = logging.getLogger(__name__)
 DetectorFactory.seed = 0
@@ -30,7 +30,8 @@ _zero_shot_pipeline = None
 _summarizer = None
 _title_generator = None
 _advice_generator = None
-
+tokenizer = AutoTokenizer.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
+model = AutoModelForSeq2SeqLM.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
 
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 
@@ -338,10 +339,16 @@ def get_summarizer():
     global _summarizer
     if _summarizer is None:
         try:
-            _summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-            logger.info("Summarizer loaded.")
+            device = 0 if torch.cuda.is_available() else -1  # GPU si dispo
+            _summarizer = pipeline(
+                "summarization",
+                model="plguillou/t5-base-fr-sum-cnndm",
+                tokenizer="plguillou/t5-base-fr-sum-cnndm",
+                device=device
+            )
+            logger.info("Summarizer chargé avec succès !")
         except Exception as e:
-            logger.error(f"Error loading summarizer: {e}")
+            logger.error(f"Erreur lors du chargement du summarizer : {e}", exc_info=True)
             _summarizer = None
     return _summarizer
 
