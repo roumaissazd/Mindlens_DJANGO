@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/photos.css' %}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="container">
   <!-- Header -->
@@ -77,4 +82,50 @@
     </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Gestion des dropdowns
+document.addEventListener('DOMContentLoaded', function() {
+  const dropdowns = document.querySelectorAll('.dropdown');
+  
+  dropdowns.forEach(dropdown => {
+    const button = dropdown.querySelector('.btn-icon');
+    const menu = dropdown.querySelector('.dropdown-menu');
+    
+    // Toggle dropdown au clic
+    button.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Fermer tous les autres dropdowns
+      document.querySelectorAll('.dropdown-menu.show').forEach(otherMenu => {
+        if (otherMenu !== menu) {
+          otherMenu.classList.remove('show');
+        }
+      });
+      
+      // Toggle le dropdown actuel
+      menu.classList.toggle('show');
+    });
+  });
+  
+  // Fermer les dropdowns en cliquant ailleurs
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown')) {
+      document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+      });
+    }
+  });
+  
+  // Empêcher la fermeture lors du clic sur le menu
+  document.querySelectorAll('.dropdown-menu').forEach(menu => {
+    menu.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
+  });
+});
+</script>
 {% endblock %}
