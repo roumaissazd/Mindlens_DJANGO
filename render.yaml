@@ -1,0 +1,24 @@
+databases:
+  - name: mindlens-db
+    plan: free
+
+services:
+  - type: web
+    name: mindlens-django
+    env: python
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: gunicorn mindlens_proj.wsgi:application
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DJANGO_DEBUG
+        value: 'False'
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mindlens-db
+          property: connectionString
+

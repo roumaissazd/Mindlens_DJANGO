@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -29,12 +30,18 @@ except ImportError:
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-n+&9-vivha^#sl3uh1jw^hz$)%(iwz5+mi!g$49o_e912wllrw'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-insecure-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+# Allow Render hostnames automatically; also allow custom hosts via env
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
+render_external_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if render_external_hostname:
+	ALLOWED_HOSTS.append(render_external_hostname)
+if DEBUG and not ALLOWED_HOSTS:
+	ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -53,6 +60,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	# WhiteNoise for static files in production
+	'whitenoise.middleware.WhiteNoiseMiddleware',
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	'django.middleware.common.CommonMiddleware',
 	'django.middleware.csrf.CsrfViewMiddleware',
@@ -83,13 +92,13 @@ WSGI_APPLICATION = 'mindlens_proj.wsgi.application'
 
 
 # Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
+# Prefer DATABASE_URL (Render managed Postgres), fallback to local SQLite
 DATABASES = {
-	'default': {
-		'ENGINE': 'django.db.backends.sqlite3',
-		'NAME': BASE_DIR / 'db.sqlite3',
-	}
+	'default': dj_database_url.config(
+		default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+		conn_max_age=600,
+		ssl_require=not DEBUG,
+	)
 }
 
 
@@ -131,6 +140,18 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
 	BASE_DIR / 'static',
 ]
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Use WhiteNoise's compressed manifest storage in production
+if not DEBUG:
+	STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Ensure Django knows when it's behind a proxy (like Render)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# CSRF trusted origins for Render
+if render_external_hostname:
+	CSRF_TRUSTED_ORIGINS = [f"https://{render_external_hostname}"]
 
 # Media files
 MEDIA_URL = '/media/'
