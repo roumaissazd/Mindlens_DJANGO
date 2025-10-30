@@ -22,42 +22,31 @@ from pathlib import Path
 # Get project root directory
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# LLM for intelligent replies
-try:
-    from groq import Groq
-    GROQ_AVAILABLE = True
-except:
-    GROQ_AVAILABLE = False
-    print("Groq not available. Install with: pip install groq")
+"""Defer heavy ML imports to runtime to keep startup memory small on Render Free."""
 
-# Import ML libraries with error handling (spaces only)
+# LLM for intelligent replies (lazy import Groq when used)
+GROQ_AVAILABLE = False
+try:
+    from groq import Groq  # type: ignore
+    GROQ_AVAILABLE = True
+except Exception:
+    pass
+
+# Flags for ML libs; detect only lightweight stdlib availability here
 ML_LIBRARIES_AVAILABLE = True
 ML_MISSING_MODULES: list[str] = []
 try:
     import io
-    import torch  # type: ignore
 except Exception as e:
     ML_LIBRARIES_AVAILABLE = False
-    ML_MISSING_MODULES.append(f"torch ({e})")
-try:
-    from transformers import pipeline  # type: ignore
-except Exception as e:
-    ML_LIBRARIES_AVAILABLE = False
-    ML_MISSING_MODULES.append(f"transformers ({e})")
-    pipeline = None  # type: ignore
-try:
-    import librosa  # type: ignore
-    import numpy as np  # type: ignore
-except Exception as e:
-    ML_LIBRARIES_AVAILABLE = False
-    ML_MISSING_MODULES.append(f"librosa/numpy ({e})")
-try:
-    from pydub import AudioSegment  # type: ignore
-except Exception as e:
-    ML_LIBRARIES_AVAILABLE = False
-    ML_MISSING_MODULES.append(f"pydub ({e})")
-if not ML_LIBRARIES_AVAILABLE:
-    print(f"Warning: ML libraries not available: {', '.join(ML_MISSING_MODULES)}")
+    ML_MISSING_MODULES.append(f"io ({e})")
+
+# Defer heavy libs to function scope
+torch = None  # type: ignore
+pipeline = None  # type: ignore
+librosa = None  # type: ignore
+np = None  # type: ignore
+AudioSegment = None  # type: ignore
 
 # Control whether to use heavyweight sentiment model (defaults to off for speed)
 USE_SENTIMENT_MODEL = os.environ.get('USE_SENTIMENT_MODEL', '0') in {'1', 'true', 'yes'}
@@ -327,6 +316,10 @@ def get_asr_pipeline():
         return _asr_pipeline
     
     try:
+        global pipeline
+        if pipeline is None:
+            from transformers import pipeline as hf_pipeline  # type: ignore
+            pipeline = hf_pipeline
         # Uses Hugging Face Whisper model locally with PyTorch backend
         # Small/base models are faster and lighter
         print("[ASR] Creating Whisper pipeline... (this may take a while on first use)")
@@ -360,6 +353,10 @@ def get_sentiment_pipeline():
     global _sentiment_pipeline
     if _sentiment_pipeline is None:
         try:
+            global pipeline
+            if pipeline is None:
+                from transformers import pipeline as hf_pipeline  # type: ignore
+                pipeline = hf_pipeline
             # Robust multilingual sentiment model
             _sentiment_pipeline = pipeline(
                 task="text-classification",
@@ -605,6 +602,10 @@ def analyze_audio_emotion(audio_path):
         return "neutral", 0.5
         
     try:
+        global librosa, np
+        if librosa is None or np is None:
+            import librosa  # type: ignore
+            import numpy as np  # type: ignore
         # Load audio file
         y, sr = librosa.load(audio_path, sr=22050)
         
@@ -652,6 +653,9 @@ def convert_to_wav(audio_file):
         return None
         
     try:
+        global AudioSegment
+        if AudioSegment is None:
+            from pydub import AudioSegment  # type: ignore
         # Detect input format by extension and read
         ext = os.path.splitext(str(audio_file))[-1].lower().lstrip('.')
         fmt = None

@@ -3,7 +3,6 @@ AI utilities for note analysis using Hugging Face transformers.
 Includes sentiment analysis, category classification, and tag generation.
 """
 import base64
-from transformers import pipeline
 import logging
 from .models import Reminder
 from django.utils import timezone
@@ -13,14 +12,12 @@ from gtts import gTTS
 from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from typing import List, Dict, Any
-import torch
 import requests
 from .models import Note
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import re
-from transformers import pipeline
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+"""Avoid importing heavy ML libs at module import time. Import inside functions."""
 
 logger = logging.getLogger(__name__)
 DetectorFactory.seed = 0
@@ -38,6 +35,7 @@ def get_sentiment_pipeline():
     global _sentiment_pipeline
     if _sentiment_pipeline is None:
         try:
+            from transformers import pipeline  # lazy import
             # Using multilingual sentiment model
             _sentiment_pipeline = pipeline(
                 "sentiment-analysis",
@@ -55,6 +53,7 @@ def get_zero_shot_pipeline():
     global _zero_shot_pipeline
     if _zero_shot_pipeline is None:
         try:
+            from transformers import pipeline  # lazy import
             # Using multilingual zero-shot model
             _zero_shot_pipeline = pipeline(
                 "zero-shot-classification",
@@ -337,7 +336,13 @@ def get_summarizer():
     global _summarizer
     if _summarizer is None:
         try:
-            device = 0 if torch.cuda.is_available() else -1  # GPU si dispo
+            # Lazy torch import to avoid heavy load at startup
+            try:
+                import torch  # type: ignore
+                device = 0 if torch.cuda.is_available() else -1
+            except Exception:
+                device = -1
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline  # lazy import
             # Charger explicitement le tokenizer "slow" (SentencePiece)
             tok = AutoTokenizer.from_pretrained("plguillou/t5-base-fr-sum-cnndm", use_fast=False)
             mdl = AutoModelForSeq2SeqLM.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
@@ -465,6 +470,7 @@ def get_title_generator():
     if _title_generator is None:
         try:
             # MODÈLE SPÉCIALISÉ EN TITRES (anglais → français OK)
+            from transformers import pipeline  # lazy import
             _title_generator = pipeline(
                 "text2text-generation",
                 model="Michau/t5-base-en-generate-headline",
@@ -592,6 +598,7 @@ def auto_generate_note_title(sender, instance, created, **kwargs):
 def get_advice_generator():
     global _advice_generator
     if _advice_generator is None:
+        from transformers import pipeline  # lazy import
         _advice_generator = pipeline(
             "text2text-generation",
             model="moussaKam/barthez-orangesum-title",
