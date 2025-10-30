@@ -30,6 +30,7 @@ urlpatterns = [
 
     # Détection de visages
     path('notes/<int:pk>/detect-faces/', views.detect_faces_in_note, name='detect_faces_in_note'),
+    path('build-face-gallery/', views.build_face_gallery, name='build_face_gallery'),
     path('api/unread-reminders/', views.api_unread_reminders, name='api_unread_reminders'),
     path('notifications/', views.notification_list, name='notification_list'),
     path('reminder/<int:pk>/delete/', views.delete_reminder, name='delete_reminder'),
@@ -43,6 +44,18 @@ path('api/generate-title/', views.api_generate_title, name='api_generate_title')
     path('resumes/<int:pk>/delete/', views.resume_delete, name='resume_delete'),
     path('resumes/<int:pk>/toggle_favorite/', views.resume_toggle_favorite, name='resume_toggle_favorite'),  # ⭐ Favori AJAX
     path('resumes/search/', views.resume_search, name='resume_search'),  # 🔍 Recherche
+
+    # Albums photo
+    path('photos/', views.photo_album_list, name='photo_album_list'),
+    path('photos/create/', views.photo_album_create, name='photo_album_create'),
+    path('photos/<int:pk>/', views.photo_album_detail, name='photo_album_detail'),
+    path('photos/<int:pk>/edit/', views.photo_album_edit, name='photo_album_edit'),
+    path('photos/<int:pk>/delete/', views.photo_album_delete, name='photo_album_delete'),
+    path('photos/<int:album_pk>/photos/<int:photo_pk>/delete/', 
+         views.photo_delete, name='photo_delete'),
+    path('photos/add-from-face/', views.photo_create_from_face, name='photo_create_from_face'),
+    path('photos/<int:photo_pk>/detect-faces/', views.detect_faces_in_album_photo, name='detect_faces_in_album_photo'),
+    path('photos/<int:photo_pk>/tag-face/', views.tag_face_in_photo, name='tag_face_in_photo'),
 ]
 
 
