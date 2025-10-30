@@ -19,7 +19,7 @@
         <a href="#voice">Voix</a>
       {% endif %}
 
-      <a href="#photos">Photos</a>
+      <a href="{% url 'photo_album_list' %}">Photos</a>
       <a href="{% url 'resume_list' %}">Résumés</a>
       {% if request.user.is_authenticated %}
       {% endif %}

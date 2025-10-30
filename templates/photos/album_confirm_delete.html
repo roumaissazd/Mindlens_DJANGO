@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+  <div class="delete-card">
+    <div class="delete-icon">🗑️</div>
+    <h2 class="delete-title">Supprimer l'album "{{ album.name }}" ?</h2>
+    <p class="delete-warning">Cette action supprimera l'album et toutes les photos qu'il contient. Cette opération est irréversible.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="delete-actions">
+        <button type="submit" class="btn-danger">Oui, supprimer</button>
+        <a href="{% url 'photo_album_detail' album.pk %}" class="btn-secondary">Annuler</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

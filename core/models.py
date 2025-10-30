@@ -199,3 +199,31 @@ class Resume(models.Model):
 
     def __str__(self):
         return self.title if self.title else f"Résumé {self.id}"
+
+
+class PhotoAlbum(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class Photo(models.Model):
+    album = models.ForeignKey(PhotoAlbum, related_name='photos', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='album_photos/')
+    person_name = models.CharField(max_length=100)
+    is_user = models.BooleanField(default=False)  # True si le nom correspond à un utilisateur existant
+    created_at = models.DateTimeField(auto_now_add=True)
+    embedding = models.JSONField(null=True, blank=True)  # <-- embedding vector stored as list of floats
+
+    def __str__(self):
+        return f"Photo de {self.person_name} dans {self.album.name}"
+
+    def save(self, *args, **kwargs):
+        # Vérifie si person_name correspond à un utilisateur existant
+        if User.objects.filter(username=self.person_name).exists():
+            self.is_user = True
+        super().save(*args, **kwargs)

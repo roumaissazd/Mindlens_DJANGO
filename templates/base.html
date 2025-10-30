@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  {% load static %}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}MindLense{% endblock %}</title>
+
+  <link rel="stylesheet" href="{% static 'css/home.css' %}">
+  <link rel="stylesheet" href="{% static 'css/notes.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  {% include 'partials/nav.html' %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include 'partials/footer.html' %}
+
+  <script>document.getElementById && (document.getElementById('year') && (document.getElementById('year').textContent = new Date().getFullYear()));</script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

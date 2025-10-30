@@ -73,11 +73,14 @@
         {% if note.image %}
           <div class="note-detail-image">
             <div class="image-container" style="position: relative;">
-              <img src="{{ note.image.url }}" alt="Image associée" id="noteImage" style="width:100%;height:auto;border-radius:12px;margin-bottom:20px;object-fit:cover;" />
+              <img src="{{ note.image.url }}" alt="Image associée" id="noteImage" style="width:100%;max-height:600px;border-radius:12px;margin-bottom:20px;object-fit:contain;" />
               <div id="faceOverlay"></div>
             </div>
-            <button id="detectFacesBtn" class="btn-secondary">
+            <button id="detectFacesBtn" class="btn-secondary hover-btn">
               <i class="fas fa-user-tag"></i> Détecter les visages
+            </button>
+            <button id="buildGalleryBtn" class="btn-primary hover-btn" style="margin-left: 10px;">
+              <i class="fas fa-database"></i> Construire la base de visages
             </button>
           </div>
           
@@ -95,18 +98,40 @@
                 position: absolute;
                 background: rgba(74, 144, 226, 0.9);
                 color: white;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 12px;
-                pointer-events: none;
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: 600;
+                pointer-events: auto;
+                cursor: pointer;
                 white-space: nowrap;
-                /* Supprimer opacity: 0 pour que le tag soit toujours visible */
-                /* Ajouter un style pour le texte */
                 text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-                /* Ajouter une bordure pour meilleure visibilité */
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                /* Ajouter un effet de flou pour un style moderne */
+                border: 2px solid rgba(255, 255, 255, 0.3);
                 backdrop-filter: blur(4px);
+                transition: all 0.3s ease;
+            }
+            
+            .face-tag:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            }
+            
+            .face-tag.unknown {
+                background: rgba(255, 165, 0, 0.95);
+                border-color: rgba(255, 200, 0, 0.5);
+            }
+            
+            .face-tag.unknown:hover {
+                background: rgba(255, 140, 0, 0.95);
+            }
+            
+            .hover-btn {
+                transition: all 0.3s ease;
+            }
+            
+            .hover-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             }
             
             /* Supprimer le hover puisque nous voulons que le tag soit toujours visible */
@@ -126,85 +151,132 @@
 
           <!-- Modifier la partie JavaScript pour ajouter l'animation -->
           <script>
-            document.getElementById('detectFacesBtn').addEventListener('click', async function() {
-                try {
-                    console.log("Début de la détection...");
-                    const response = await fetch(`/notes/{{ note.pk }}/detect-faces/`);
-                    console.log("Réponse reçue:", response);
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log("Données reçues:", data);
-                    
-                    if (data.success) {
-                        const overlay = document.getElementById('faceOverlay');
-                        overlay.innerHTML = '';
-                        
-                        const img = document.getElementById('noteImage');
-                        const imgRect = img.getBoundingClientRect();
-                        const scaleX = img.naturalWidth / img.width;
-                        const scaleY = img.naturalHeight / img.height;
-                        
-                        data.faces.forEach(face => {
-                            console.log("Traitement du visage:", face);
-                            
-                            const box = document.createElement('div');
-                            box.className = 'face-box';
-                            box.style.left = `${face.location.left / scaleX}px`;
-                            box.style.top = `${face.location.top / scaleY}px`;
-                            box.style.width = `${(face.location.right - face.location.left) / scaleX}px`;
-                            box.style.height = `${(face.location.bottom - face.location.top) / scaleY}px`;
-                            
-                            const tag = document.createElement('div');
-                            tag.className = 'face-tag';
-                            
-                            // Vérifier si la confiance est inférieure à 40%
-                            if (face.confidence < 40) {
-                                tag.textContent = `Inconnu 👤`;
-                                box.style.border = '2px solid #FFA500'; // Orange pour les inconnus
-                                tag.style.background = 'rgba(255, 165, 0, 0.9)'; // Orange semi-transparent
-                            } else {
-                                tag.textContent = `${face.username} (${Math.round(face.confidence)}%)`;
-                                box.style.border = '2px solid #4A90E2'; // Bleu pour les personnes reconnues
-                                tag.style.background = 'rgba(74, 144, 226, 0.9)'; // Bleu semi-transparent
-                            }
-                            
-                            tag.style.left = `${face.location.left / scaleX}px`;
-                            tag.style.top = `${(face.location.bottom / scaleY) + 5}px`; // Placer le tag sous le cadre
-                            
-                            // Ajouter une animation d'apparition
-                            box.style.animation = 'fadeIn 0.5s ease-out';
-                            tag.style.animation = 'fadeIn 0.5s ease-out';
-                            
-                            overlay.appendChild(box);
-                            overlay.appendChild(tag);
-                        });
+document.getElementById('detectFacesBtn').addEventListener('click', async function() {
+    try {
+        const response = await fetch(`/notes/{{ note.pk }}/detect-faces/`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data.success) {
+            const overlay = document.getElementById('faceOverlay');
+            overlay.innerHTML = '';
+            const img = document.getElementById('noteImage');
+            const scaleX = img.naturalWidth / img.width;
+            const scaleY = img.naturalHeight / img.height;
 
-                        // Style pour l'animation reste le même
-                        const style = document.createElement('style');
-                        style.textContent = `
-                            @keyframes fadeIn {
-                                from {
-                                    opacity: 0;
-                                    transform: translateY(-10px);
-                                }
-                                to {
-                                    opacity: 1;
-                                    transform: translateY(0);
-                                }
+            data.faces.forEach((face, idx) => {
+                const loc = face.location;
+                const left = loc.left / scaleX;
+                const top = loc.top / scaleY;
+                const width = (loc.right - loc.left) / scaleX;
+                const height = (loc.bottom - loc.top) / scaleY;
+
+                const box = document.createElement('div');
+                box.className = 'face-box';
+                box.style.left = `${left}px`;
+                box.style.top = `${top}px`;
+                box.style.width = `${width}px`;
+                box.style.height = `${height}px`;
+
+                const tag = document.createElement('button');
+                tag.className = 'face-tag';
+                tag.style.left = `${left}px`;
+                tag.style.top = `${(loc.bottom / scaleY) + 5}px`;
+                tag.type = 'button';
+
+                if (!face.username) {
+                    tag.textContent = `👤 Inconnu • Cliquez pour taguer`;
+                    tag.classList.add('unknown');
+                    tag.addEventListener('click', async () => {
+                        const name = prompt("Nom de la personne :");
+                        if (!name) return;
+                        
+                        tag.textContent = '⏳ Sauvegarde...';
+                        tag.style.pointerEvents = 'none';
+                        
+                        const form = new FormData();
+                        form.append('note_pk', '{{ note.pk }}');
+                        form.append('top', loc.top);
+                        form.append('right', loc.right);
+                        form.append('bottom', loc.bottom);
+                        form.append('left', loc.left);
+                        form.append('person_name', name);
+                        
+                        try {
+                            const resp = await fetch("{% url 'photo_create_from_face' %}", {
+                                method: 'POST',
+                                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                                body: form
+                            });
+                            const result = await resp.json();
+                            if (result.success) {
+                                tag.textContent = `✅ ${result.person_name} sauvegardé`;
+                                tag.classList.remove('unknown');
+                                tag.style.background = 'rgba(16, 185, 129, 0.95)';
+                                setTimeout(() => {
+                                    alert(`✅ Visage de ${result.person_name} ajouté à l'album d'entraînement!\n\nReconstruisez la base pour l'utiliser.`);
+                                }, 500);
+                            } else {
+                                alert("❌ Erreur: " + (result.error || 'unknown'));
+                                tag.textContent = `👤 Inconnu • Cliquez pour taguer`;
+                                tag.style.pointerEvents = 'auto';
                             }
-                        `;
-                        document.head.appendChild(style);
-                    } else {
-                        console.error("Erreur:", data.error);
-                    }
-                } catch (error) {
-                    console.error('Erreur:', error);
+                        } catch (error) {
+                            alert("❌ Erreur: " + error.message);
+                            tag.textContent = `👤 Inconnu • Cliquez pour taguer`;
+                            tag.style.pointerEvents = 'auto';
+                        }
+                    });
+                } else {
+                    tag.textContent = `✓ ${face.username} (${Math.round(face.confidence)}%)`;
                 }
+
+                // animation
+                box.style.animation = 'fadeIn 0.4s ease-out';
+                tag.style.animation = 'fadeIn 0.4s ease-out';
+
+                overlay.appendChild(box);
+                overlay.appendChild(tag);
             });
+        } else {
+            console.error(data.error);
+        }
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+// Bouton pour construire la galerie de visages
+document.getElementById('buildGalleryBtn').addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    try {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Construction en cours...';
+        btn.disabled = true;
+        
+        const response = await fetch('/build-face-gallery/');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Base de visages construite avec succès !\n\n` +
+                  `📊 Résumé:\n` +
+                  `• Profils traités: ${data.results.profiles_processed}\n` +
+                  `• Photos traitées: ${data.results.photos_processed}\n` +
+                  `• Total embeddings: ${data.results.total_embeddings}\n\n` +
+                  `Vous pouvez maintenant détecter les visages !`);
+        } else {
+            alert('❌ Erreur: ' + data.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('❌ Erreur lors de la construction: ' + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
           </script>
         {% endif %}
 

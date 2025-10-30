@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Note, Tag, Profile, Resume
+from .models import Note, Tag, Profile, Resume, PhotoAlbum, Photo
 
 
 
@@ -181,3 +181,28 @@ class ResumeGenerateForm(forms.Form):
         label="Catégorie",
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+
+
+class PhotoAlbumForm(forms.ModelForm):
+    class Meta:
+        model = PhotoAlbum
+        fields = ['name', 'description']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'input'}),
+            'description': forms.Textarea(attrs={'class': 'textarea', 'rows': 3}),
+        }
+
+class PhotoForm(forms.ModelForm):
+    person_name = forms.CharField(
+        widget=forms.TextInput(attrs={
+            'class': 'input',
+            'list': 'users-list'
+        })
+    )
+    
+    class Meta:
+        model = Photo
+        fields = ['image', 'person_name']
+        widgets = {
+            'image': forms.FileInput(attrs={'class': 'input', 'accept': 'image/*'}),
+        }

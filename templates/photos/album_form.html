@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+  <nav class="breadcrumb">
+    <a href="{% url 'photo_album_list' %}" class="breadcrumb-link">← Retour aux albums</a>
+  </nav>
+
+  <div class="form-card">
+    <div class="form-header">
+      <h1 class="form-title">{% if action == 'create' %}Nouvel album{% else %}Modifier l'album{% endif %}</h1>
+      <p class="form-subtitle">{% if action == 'create' %}Créez un album pour regrouper des photos.{% else %}Modifiez les informations de l'album.{% endif %}</p>
+    </div>
+
+    <form method="post" class="note-form" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if form.errors %}
+        <div class="form-errors">
+          <h4>⚠️ Erreurs :</h4>
+          {{ form.errors }}
+        </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label class="form-label">Nom</label>
+        {{ form.name }}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        {{ form.description }}
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary btn-submit">
+          {% if action == 'create' %}Créer l'album{% else %}Enregistrer{% endif %}
+        </button>
+        <a href="{% url 'photo_album_list' %}" class="btn-secondary">Annuler</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

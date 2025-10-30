@@ -1,0 +1,498 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+  <nav class="breadcrumb">
+    <a href="{% url 'photo_album_list' %}" class="breadcrumb-link">← Retour aux albums</a>
+  </nav>
+
+  <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h1 class="page-title">📸 {{ album.name }}</h1>
+      <p class="notes-subtitle">{{ album.description }}</p>
+    </div>
+    <div>
+      <a href="{% url 'photo_album_edit' album.pk %}" class="btn-secondary">Modifier</a>
+      <a href="{% url 'photo_album_delete' album.pk %}" class="btn-danger">Supprimer</a>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-top:20px">
+    <!-- Photos grid -->
+    <section>
+      <!-- Search bar for photos -->
+      <form method="get" style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+        <input type="text" name="q" value="{{ q }}" placeholder="Rechercher un nom..." class="input" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb" />
+        <button class="btn-secondary" type="submit">Rechercher</button>
+      </form>
+
+      {% if photos %}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+          {% for photo in photos %}
+            <div class="photo-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;position:relative">
+              <div class="photo-container" style="position:relative">
+                <img src="{{ photo.image.url }}" alt="{{ photo.person_name }}" class="photo-img" data-photo-id="{{ photo.pk }}" style="width:100%;height:180px;object-fit:cover;border-radius:8px;cursor:pointer" />
+                <div class="face-overlay" id="overlay-{{ photo.pk }}" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></div>
+              </div>
+              <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:4px">
+                <div style="font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ photo.person_name }}</div>
+                <button class="btn-secondary detect-faces-btn" data-photo-id="{{ photo.pk }}" style="font-size:11px;padding:4px 8px" title="Détecter et taguer les visages">
+                  👤 Tag
+                </button>
+                <form method="post" action="{% url 'photo_delete' album.pk photo.pk %}" style="margin:0;">
+                  {% csrf_token %}
+                  <button class="btn-danger" type="submit" style="font-size:11px;padding:4px 8px" title="Supprimer">🗑️</button>
+                </form>
+              </div>
+              {% if photo.is_user %}
+                <div style="position:absolute;top:10px;left:10px;background:rgba(74,144,226,0.9);color:#fff;padding:4px 8px;border-radius:6px;font-size:12px">Utilisateur</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+          <nav aria-label="Pagination" style="margin-top:18px;display:flex;gap:8px;justify-content:center;align-items:center">
+            {% if page_obj.has_previous %}
+              <a href="?q={{ q|urlencode }}&page={{ page_obj.previous_page_number }}" class="btn-secondary">← Précédent</a>
+            {% else %}
+              <button class="btn-secondary" disabled style="opacity:0.5">← Précédent</button>
+            {% endif %}
+
+            <span style="padding:8px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+              <a href="?q={{ q|urlencode }}&page={{ page_obj.next_page_number }}" class="btn-secondary">Suivant →</a>
+            {% else %}
+              <button class="btn-secondary" disabled style="opacity:0.5">Suivant →</button>
+            {% endif %}
+          </nav>
+        {% endif %}
+      {% else %}
+        <div class="empty-state">
+          <h3 class="empty-title">Aucune photo</h3>
+          <p class="empty-text">Ajoutez des photos à cet album pour améliorer la base de données de visages.</p>
+        </div>
+      {% endif %}
+    </section>
+
+    <!-- Add photo form -->
+    <aside>
+      <div class="form-card">
+        <h3 class="form-title" style="font-size:18px">Ajouter une photo</h3>
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label">Image</label>
+            {{ form.image }}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nom de la personne</label>
+            {{ form.person_name }}
+            <datalist id="users-list">
+              {% for u in users %}
+                <option value="{{ u }}"></option>
+              {% endfor %}
+            </datalist>
+            <p class="form-help">Choisissez un nom existant ou tapez un nouveau nom (sera utilisé pour l'autotagger).</p>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Ajouter</button>
+          </div>
+        </form>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<style>
+.face-box {
+  position: absolute;
+  border: 3px solid #4A90E2;
+  background: rgba(74, 144, 226, 0.15);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+/* Modal pour le tagging */
+.tag-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.tag-modal.active {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.tag-modal-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 1200px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 0;
+}
+
+.tag-modal-image {
+  position: relative;
+  background: #f9fafb;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.tag-modal-image img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.tag-modal-sidebar {
+  padding: 24px;
+  overflow-y: auto;
+  max-height: 90vh;
+}
+
+.tag-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.tag-modal-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.close-modal {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.close-modal:hover {
+  background: #dc2626;
+}
+
+.face-form {
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.face-form.tagged {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.face-form-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.face-number {
+  background: #4A90E2;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.face-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.face-form button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.face-form .btn-save {
+  background: #10b981;
+  color: white;
+}
+
+.face-form .btn-save:hover {
+  background: #059669;
+}
+
+.face-form .btn-save:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.face-status {
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.image-overlay-container {
+  position: relative;
+  display: inline-block;
+}
+</style>
+
+<!-- Modal pour le tagging -->
+<div id="tagModal" class="tag-modal">
+  <div class="tag-modal-content">
+    <div class="tag-modal-image">
+      <div class="image-overlay-container">
+        <img id="modalImage" src="" alt="Photo à taguer" />
+        <div id="modalOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
+      </div>
+    </div>
+    <div class="tag-modal-sidebar">
+      <div class="tag-modal-header">
+        <h2>🏷️ Taguer les visages</h2>
+        <button class="close-modal" onclick="closeTagModal()">✕ Fermer</button>
+      </div>
+      <div id="faceForms"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPhotoId = null;
+let detectedFaces = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Gérer les clics sur les boutons de détection
+  document.querySelectorAll('.detect-faces-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const photoId = this.dataset.photoId;
+      const img = document.querySelector(`img[data-photo-id="${photoId}"]`);
+      
+      // Afficher un loader
+      this.innerHTML = '⏳ Détection...';
+      this.disabled = true;
+      
+      try {
+        const response = await fetch(`/photos/${photoId}/detect-faces/`);
+        const data = await response.json();
+        
+        if (data.success && data.faces.length > 0) {
+          // Ouvrir le modal avec les visages détectés
+          openTagModal(photoId, img.src, data.faces);
+        } else {
+          alert('❌ Aucun visage détecté dans cette photo.');
+        }
+      } catch (error) {
+        console.error('Erreur:', error);
+        alert('❌ Erreur lors de la détection: ' + error.message);
+      } finally {
+        this.innerHTML = '👤 Tag';
+        this.disabled = false;
+      }
+    });
+  });
+});
+
+function openTagModal(photoId, imageSrc, faces) {
+  currentPhotoId = photoId;
+  detectedFaces = faces;
+  
+  // Afficher le modal
+  const modal = document.getElementById('tagModal');
+  const modalImage = document.getElementById('modalImage');
+  const modalOverlay = document.getElementById('modalOverlay');
+  const faceForms = document.getElementById('faceForms');
+  
+  modalImage.src = imageSrc;
+  modal.classList.add('active');
+  
+  // Attendre que l'image soit chargée pour dessiner les boîtes
+  modalImage.onload = function() {
+    drawFaceBoxes();
+    createFaceForms();
+  };
+}
+
+function drawFaceBoxes() {
+  const modalImage = document.getElementById('modalImage');
+  const modalOverlay = document.getElementById('modalOverlay');
+  modalOverlay.innerHTML = '';
+  
+  const displayWidth = modalImage.clientWidth;
+  const displayHeight = modalImage.clientHeight;
+  const naturalWidth = modalImage.naturalWidth;
+  const naturalHeight = modalImage.naturalHeight;
+  const scaleX = displayWidth / naturalWidth;
+  const scaleY = displayHeight / naturalHeight;
+  
+  detectedFaces.forEach((face, index) => {
+    const loc = face.location;
+    const x = loc.x * scaleX;
+    const y = loc.y * scaleY;
+    const w = loc.w * scaleX;
+    const h = loc.h * scaleY;
+    
+    const box = document.createElement('div');
+    box.className = 'face-box';
+    box.style.left = `${x}px`;
+    box.style.top = `${y}px`;
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    
+    const label = document.createElement('div');
+    label.style.cssText = 'position:absolute;top:-25px;left:0;background:#4A90E2;color:white;padding:4px 10px;border-radius:6px;font-size:13px;font-weight:bold;box-shadow:0 2px 4px rgba(0,0,0,0.2)';
+    label.textContent = `Visage ${index + 1}`;
+    box.appendChild(label);
+    
+    modalOverlay.appendChild(box);
+  });
+}
+
+function createFaceForms() {
+  const faceForms = document.getElementById('faceForms');
+  faceForms.innerHTML = '';
+  
+  detectedFaces.forEach((face, index) => {
+    const form = document.createElement('div');
+    form.className = 'face-form';
+    form.id = `face-form-${index}`;
+    
+    form.innerHTML = `
+      <div class="face-form-header">
+        <span class="face-number">Visage ${index + 1}</span>
+      </div>
+      <input 
+        type="text" 
+        id="name-input-${index}" 
+        placeholder="Nom de la personne" 
+        list="users-list" 
+        autocomplete="off"
+      />
+      <button class="btn-save" onclick="saveFaceTag(${index})">
+        💾 Sauvegarder ce visage
+      </button>
+      <div id="status-${index}" class="face-status" style="display:none"></div>
+    `;
+    
+    faceForms.appendChild(form);
+  });
+}
+
+async function saveFaceTag(faceIndex) {
+  const nameInput = document.getElementById(`name-input-${faceIndex}`);
+  const personName = nameInput.value.trim();
+  const statusDiv = document.getElementById(`status-${faceIndex}`);
+  const form = document.getElementById(`face-form-${faceIndex}`);
+  const saveBtn = form.querySelector('.btn-save');
+  
+  if (!personName) {
+    alert('⚠️ Veuillez entrer un nom');
+    return;
+  }
+  
+  // Désactiver le bouton
+  saveBtn.disabled = true;
+  saveBtn.textContent = '⏳ Sauvegarde...';
+  
+  try {
+    const face = detectedFaces[faceIndex];
+    const loc = face.location;
+    
+    const formData = new FormData();
+    formData.append('person_name', personName);
+    formData.append('x', loc.x);
+    formData.append('y', loc.y);
+    formData.append('w', loc.w);
+    formData.append('h', loc.h);
+    
+    const response = await fetch(`/photos/${currentPhotoId}/tag-face/`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Marquer comme tagué
+      form.classList.add('tagged');
+      nameInput.disabled = true;
+      saveBtn.textContent = '✅ Sauvegardé';
+      statusDiv.textContent = `✅ ${data.person_name} enregistré avec embedding`;
+      statusDiv.style.display = 'block';
+    } else {
+      alert('❌ Erreur: ' + data.error);
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 Sauvegarder ce visage';
+    }
+  } catch (error) {
+    console.error('Erreur:', error);
+    alert('❌ Erreur lors de la sauvegarde: ' + error.message);
+    saveBtn.disabled = false;
+    saveBtn.textContent = '💾 Sauvegarder ce visage';
+  }
+}
+
+function closeTagModal() {
+  const modal = document.getElementById('tagModal');
+  modal.classList.remove('active');
+  
+  // Vérifier si des visages ont été tagués
+  const taggedForms = document.querySelectorAll('.face-form.tagged');
+  if (taggedForms.length > 0) {
+    // Recharger la page pour voir les nouvelles photos
+    window.location.reload();
+  }
+}
+
+// Fermer le modal en cliquant en dehors
+document.getElementById('tagModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeTagModal();
+  }
+});
+</script>
+{% endblock %}

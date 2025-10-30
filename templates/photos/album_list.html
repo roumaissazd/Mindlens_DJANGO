@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+  <!-- Header -->
+  <div class="page-header">
+    <h1 class="page-title">📸 Mes Albums Photos</h1>
+    <div class="header-actions">
+      <a href="{% url 'photo_album_create' %}" class="btn-primary">
+        <i class="fas fa-plus"></i> Nouvel Album
+      </a>
+    </div>
+  </div>
+
+  {% if albums %}
+    <div class="albums-grid">
+      {% for album in albums %}
+        <div class="album-card">
+          <!-- Album Cover -->
+          <div class="album-cover">
+            {% if album.photos.first %}
+              <img src="{{ album.photos.first.image.url }}" alt="Couverture de l'album">
+            {% else %}
+              <div class="empty-cover">
+                <i class="fas fa-images"></i>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Album Info -->
+          <div class="album-info">
+            <h3 class="album-title">{{ album.name }}</h3>
+            <p class="album-meta">
+              {{ album.photos.count }} photo(s)
+              <span class="meta-separator">•</span>
+              {{ album.created_at|date:"d/m/Y" }}
+            </p>
+            {% if album.description %}
+              <p class="album-description">{{ album.description|truncatewords:20 }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Album Actions -->
+          <div class="album-actions">
+            <a href="{% url 'photo_album_detail' album.pk %}" class="btn-secondary">
+              Voir l'album
+            </a>
+            <div class="dropdown">
+              <button class="btn-icon" type="button">
+                <i class="fas fa-ellipsis-v"></i>
+              </button>
+              <div class="dropdown-menu">
+                <a href="{% url 'photo_album_edit' album.pk %}" class="dropdown-item">
+                  <i class="fas fa-edit"></i> Modifier
+                </a>
+                <a href="{% url 'photo_album_delete' album.pk %}" class="dropdown-item text-danger">
+                  <i class="fas fa-trash"></i> Supprimer
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <!-- Empty State -->
+    <div class="empty-state">
+      <div class="empty-icon">
+        <i class="fas fa-images"></i>
+      </div>
+      <h3 class="empty-title">Aucun album photo</h3>
+      <p class="empty-text">Commencez par créer votre premier album !</p>
+      <a href="{% url 'photo_album_create' %}" class="btn-primary">
+        Créer un album
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
