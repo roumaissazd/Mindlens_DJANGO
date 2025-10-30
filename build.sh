@@ -9,4 +9,9 @@ pip install -r requirements.txt
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+# Optionally create/update a superuser on deploy (controlled by env)
+if [ "${AUTO_CREATE_SUPERUSER:-0}" = "1" ] || [ "${AUTO_CREATE_SUPERUSER:-0}" = "true" ]; then
+  python scripts/ensure_admin.py || true
+fi
+
 
