@@ -19,80 +19,179 @@
         <a href="#voice">Voix</a>
       {% endif %}
 
+
       <a href="{% url 'photo_album_list' %}">Photos</a>
+
       <a href="{% url 'resume_list' %}">Résumés</a>
       {% if request.user.is_authenticated %}
+
       {% endif %}
     </nav>
 
     {% if request.user.is_authenticated %}
-      <!-- Notification Icon -->
-      <div id="reminder-bell-container" style="position:relative;display:inline-block;margin-left:1rem;vertical-align:middle;cursor:pointer;">
-        <!-- SVG Icône Notification -->
+      <!-- ICÔNE NOTIFICATION (CLIC → MODAL) -->
+      <div id="notification-bell" style="position:relative;display:inline-block;margin-left:1rem;vertical-align:middle;cursor:pointer;">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" style="color:#4a5568;">
           <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.901a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2.965 7H15.97C13.505 12.098 13 7.098 13 6a5.002 5.002 0 0 0-3.005-4.901z"/>
         </svg>
 
-        <!-- Badge -->
-        <span id="reminder-badge" style="position:absolute;top:-8px;right:-8px;background:#e53e3e;color:white;font-size:0.65rem;font-weight:bold;min-width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;opacity:0;">
+        <span id="notification-badge" style="position:absolute;top:-8px;right:-8px;background:#e53e3e;color:white;font-size:0.65rem;font-weight:bold;min-width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid white;opacity:0;">
           0
         </span>
+      </div>
 
-        <!-- Dropdown -->
-        <div id="reminder-dropdown" style="display:none;position:absolute;right:0;top:100%;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 16px rgba(0,0,0,0.1);min-width:300px;z-index:1000;margin-top:0.5rem;">
-          <div id="reminder-list" style="max-height:400px;overflow-y:auto;">
-            <!-- Chargé via JS -->
+      <!-- ICÔNE TRADUIRE (CLIC) -->
+      <div id="translate-container" style="position:relative;display:inline-block;margin-left:1rem;vertical-align:middle;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" style="color:#4a5568;cursor:pointer;">
+          <path d="M4.5 6.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5z"/>
+          <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/>
+          <path d="M5.255 3.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5zM8 3a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm1.5.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"/>
+        </svg>
+
+        <div id="translate-dropdown" style="display:none;position:absolute;right:0;top:100%;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 16px rgba(0,0,0,0.1);min-width:180px;z-index:1000;margin-top:0.5rem;padding:0.5rem 0;">
+          <div style="padding:0.5rem 1rem;font-weight:600;color:#2d3748;font-size:0.9rem;">Traduire la page</div>
+          <div style="height:1px;background:#e2e8f0;margin:0.25rem 0;"></div>
+          <a href="javascript:void(0)" onclick="translatePage('en')" style="display:block;padding:0.5rem 1rem;color:#4a5568;text-decoration:none;font-size:0.85rem;">English</a>
+          <a href="javascript:void(0)" onclick="translatePage('es')" style="display:block;padding:0.5rem 1rem;color:#4a5568;text-decoration:none;font-size:0.85rem;">Español</a>
+          <a href="javascript:void(0)" onclick="translatePage('de')" style="display:block;padding:0.5rem 1rem;color:#4a5568;text-decoration:none;font-size:0.85rem;">Deutsch</a>
+          <a href="javascript:void(0)" onclick="translatePage('it')" style="display:block;padding:0.5rem 1rem;color:#4a5568;text-decoration:none;font-size:0.85rem;">Italiano</a>
+        </div>
+      </div>
+
+      <!-- MODAL POP-UP NOTIFICATIONS (TOUJOURS DISPONIBLE) -->
+      <div id="notification-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;justify-content:center;align-items:flex-start;padding-top:80px;">
+        <div style="background:white;border-radius:12px;width:90%;max-width:500px;max-height:80vh;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+          <!-- En-tête -->
+          <div style="padding:1rem 1.5rem;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;font-size:1.2rem;font-weight:600;color:#2d3748;">Notifications</h3>
+            <button id="close-modal" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#718096;">×</button>
+          </div>
+
+          <!-- Liste -->
+          <div id="modal-reminder-list" style="max-height:60vh;overflow-y:auto;padding:0.5rem 0;"></div>
+
+          <!-- Pied -->
+          <div style="padding:1rem 1.5rem;border-top:1px solid #e2e8f0;text-align:center;">
+            <a href="{% url 'notification_list' %}" style="color:#4a5568;text-decoration:none;font-size:0.9rem;font-weight:500;">
+              Voir toutes les notifications →
+            </a>
           </div>
         </div>
       </div>
 
-      <!-- Script AJAX pour charger les rappels -->
+      <!-- SCRIPT : NOTIF + TRADUIRE + MODAL -->
       <script>
         document.addEventListener('DOMContentLoaded', function() {
-          const badge = document.getElementById('reminder-badge');
-          const list = document.getElementById('reminder-list');
-          const dropdown = document.getElementById('reminder-dropdown');
-          const bell = document.getElementById('reminder-bell-container');
+          const bell = document.getElementById('notification-bell');
+          const modal = document.getElementById('notification-modal');
+          const modalList = document.getElementById('modal-reminder-list');
+          const closeBtn = document.getElementById('close-modal');
+          const badge = document.getElementById('notification-badge');
 
-          fetch('{% url "api_unread_reminders" %}')
-            .then(response => response.json())
-            .then(data => {
-              if (data.count > 0) {
+          // Ouvrir modal
+          bell.addEventListener('click', function(e) {
+            e.stopPropagation();
+            modal.style.display = 'flex';
+            loadNotifications();
+          });
+
+          // Fermer modal
+          closeBtn.addEventListener('click', () => modal.style.display = 'none');
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+          });
+
+          // Charger les rappels
+          function loadNotifications() {
+            fetch('{% url "api_unread_reminders" %}')
+              .then(r => r.json())
+              .then(data => {
+                modalList.innerHTML = '';
                 badge.textContent = data.count;
-                badge.style.opacity = '1';
+                badge.style.opacity = data.count > 0 ? '1' : '0';
 
-                data.reminders.forEach(r => {
-                  const priorityColor = 
-                    r.priority === 'haute' ? '#e53e3e' : 
-                    r.priority === 'moyenne' ? '#dd6b20' : '#718096';
-                  const item = `
-                    <a href="${r.url}" style="display:block;padding:0.75rem 1rem;border-bottom:1px solid #edf2f7;color:#2d3748;text-decoration:none;font-size:0.9rem;">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <div style="flex:1;">
-                          <span style="display:inline-block;background:${priorityColor};color:white;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:bold;margin-right:0.5rem;">
+                if (data.count > 0) {
+                  data.reminders.forEach(r => {
+                    const color = r.priority === 'haute' ? '#e53e3e' : r.priority === 'moyenne' ? '#dd6b20' : '#718096';
+                    modalList.innerHTML += `
+                      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1.5rem;border-bottom:1px solid #f3f4f6;">
+                        <a href="${r.url}" style="flex:1;color:#2d3748;text-decoration:none;">
+                          <span style="background:${color};color:white;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:bold;margin-right:0.5rem;">
                             ${r.priority.charAt(0).toUpperCase() + r.priority.slice(1)}
                           </span>
                           <span style="font-weight:500;">${r.message}</span>
-                        </div>
-                        <small style="color:#718096;font-size:0.75rem;">${r.time}</small>
+                          <div style="color:#718096;font-size:0.75rem;margin-top:0.25rem;">${r.time}</div>
+                        </a>
+                        <button onclick="deleteReminder(${r.id})" style="background:none;border:none;color:#e53e3e;font-size:1.2rem;cursor:pointer;padding:0.5rem;">
+                          Delete
+                        </button>
                       </div>
-                    </a>
-                  `;
-                  list.innerHTML += item;
-                });
-              } else {
-                list.innerHTML = '<div style="padding:0.75rem 1rem;color:#a0aec0;font-size:0.85rem;text-align:center;">Aucun rappel</div>';
-              }
+                    `;
+                  });
+                } else {
+                  modalList.innerHTML = '<div style="padding:1.5rem;text-align:center;color:#a0aec0;">Aucune notification</div>';
+                }
+              });
+          }
 
-              // Hover
-              bell.addEventListener('mouseenter', () => dropdown.style.display = 'block');
-              bell.addEventListener('mouseleave', () => dropdown.style.display = 'none');
-            })
-            .catch(err => {
-              console.error("Erreur:", err);
-              list.innerHTML = '<div style="padding:0.75rem 1rem;color:#e53e3e;font-size:0.85rem;text-align:center;">Erreur</div>';
-            });
+          // Supprimer
+          window.deleteReminder = function(id) {
+            if (confirm("Supprimer cette notification ?")) {
+              fetch(`/reminder/${id}/delete/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+              })
+              .then(r => r.json())
+              .then(data => {
+                if (data.success) {
+                  loadNotifications(); // Recharge
+                }
+              });
+            }
+          };
+
+          // === TRADUCTION (CLIC) ===
+          const translateContainer = document.getElementById('translate-container');
+          const translateDropdown = document.getElementById('translate-dropdown');
+          let translateOpen = false;
+
+          translateContainer.addEventListener('click', function(e) {
+            e.stopPropagation();
+            translateOpen = !translateOpen;
+            translateDropdown.style.display = translateOpen ? 'block' : 'none';
+          });
+
+          document.addEventListener('click', function() {
+            if (translateOpen) {
+              translateOpen = false;
+              translateDropdown.style.display = 'none';
+            }
+          });
+
+          translateDropdown.addEventListener('click', e => e.stopPropagation());
         });
+
+        function translatePage(lang) {
+          const elements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, span, a, button, label');
+          let count = 0;
+          elements.forEach(el => {
+            if (el.children.length === 0 && el.textContent.trim()) {
+              const text = el.textContent.trim();
+              if (text.length > 1 && !/^\d+$/.test(text)) {
+                fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=fr|${lang}`)
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data.responseData.translatedText && !data.responseData.translatedText.includes('ERROR')) {
+                      el.textContent = data.responseData.translatedText;
+                      count++;
+                    }
+                  });
+              }
+            }
+          });
+          document.getElementById('translate-dropdown').style.display = 'none';
+          setTimeout(() => alert(`Page traduite en ${lang.toUpperCase()} ! (${count} éléments)`), 500);
+        }
       </script>
     {% endif %}
 

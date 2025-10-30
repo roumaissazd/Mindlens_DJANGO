@@ -9,9 +9,18 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Q
+
+from .ai_utils import translate_note_mymemory
+from .ai_utils import generate_title
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+import json
+
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator
 from django.conf import settings
+
 import logging
 import json
 import numpy as np
@@ -20,7 +29,7 @@ from .models import Note, Tag, Profile, Reminder, PhotoAlbum, Photo
 from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm, PhotoAlbumForm, PhotoForm
 from .models import Note, Tag, Profile
 from .ai_utils import analyze_note
-
+from .ai_utils import generate_smart_advice
 from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm, ResumeGenerateForm
 from .models import Note, Tag, Profile, Resume
 from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64 
@@ -987,6 +996,60 @@ def resume_search(request):
         'categories': categories,
     })
 
+@login_required
+def translate_note_view(request, pk):
+    note = get_object_or_404(Note, pk=pk, user=request.user)
+    
+    if request.method == 'POST':
+        target = request.POST.get('target_language', 'en')
+        success = translate_note_mymemory(note, target)
+        if success:
+            messages.success(request, f"Traduit en {target.upper()} !")
+        else:
+            messages.error(request, "Erreur traduction (MyMemory).")
+    
+    return redirect('note_detail', pk=note.pk)
+
+@login_required
+def notification_list(request):
+    """Liste complète des notifications (rappels) de l'utilisateur."""
+    reminders = Reminder.objects.filter(user=request.user).order_by('-priority', '-trigger_at')
+    
+    context = {
+        'reminders': reminders,
+        'title': 'Toutes les Notifications',
+    }
+    return render(request, 'notes/notification_list.html', context)
+
+
+@login_required
+def delete_reminder(request, pk):
+    """Supprime une notification (AJAX)."""
+    if request.method == 'POST':
+        reminder = get_object_or_404(Reminder, pk=pk, user=request.user)
+        reminder.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
+
+@api_view(['POST'])
+def api_generate_title(request):
+    text = request.data.get('content', '').strip()
+    if not text:
+        return Response({"error": "Contenu requis"}, status=400)
+    
+    title = generate_title(text)
+    return Response({"title": title})
+
+# The note_detail function was present in both branches, keeping the version that includes smart_advice.
+# The original note_detail function was defined earlier in the file. This one seems to be a re-definition.
+# I will assume the one with smart_advice is the intended final version and place it here.
+def note_detail(request, pk):
+    note = get_object_or_404(Note, pk=pk, user=request.user) # Ensure user owns the note
+    if not note.smart_advice and note.content:
+        note.smart_advice = generate_smart_advice(note.content)
+        note.save()
+    return render(request, 'notes/note_detail.html', {'note': note})
+
 # ============ PHOTOS VIEWS ============
 
 @login_required
@@ -1146,3 +1209,4 @@ def photo_create_from_face(request):
     except Exception as e:
         logger.exception("Error creating face photo: %s", e)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
