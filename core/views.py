@@ -21,7 +21,7 @@ from .models import Note, Tag, Profile, Reminder
 from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm
 from .models import Note, Tag, Profile
 from .ai_utils import analyze_note
-
+from .ai_utils import generate_smart_advice
 from .forms import SignUpForm, NoteForm, SearchForm, ProfileForm, ResumeGenerateForm
 from .models import Note, Tag, Profile, Resume
 from .ai_utils import analyze_note, generate_summary_from_notes, text_to_speech_base64 
@@ -721,3 +721,15 @@ def api_generate_title(request):
     
     title = generate_title(text)
     return Response({"title": title})
+
+
+
+
+def note_detail(request, pk):
+    note = Note.objects.get(pk=pk)
+    
+    if not note.smart_advice and note.content:
+        note.smart_advice = generate_smart_advice(note.content)
+        note.save()
+
+    return render(request, 'notes/note_detail.html', {'note': note})    

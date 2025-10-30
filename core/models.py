@@ -80,7 +80,7 @@ class Note(models.Model):
     sentiment_score = models.FloatField(null=True, blank=True)
     sentiment_label = models.CharField(max_length=50, blank=True)
     auto_title_generated = models.BooleanField(default=False, verbose_name="Titre généré automatiquement par IA")
-
+    smart_advice = models.TextField(blank=True, null=True)
     # Manual tags
     tags = models.ManyToManyField(Tag, blank=True, related_name='notes')
 

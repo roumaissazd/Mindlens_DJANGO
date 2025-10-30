@@ -259,7 +259,20 @@
             {% endif %}
           </div>
         </div>
-
+<!-- Conseil IA -->
+{% if note.smart_advice %}
+  <div class="ai-card">
+    <div class="ai-card-header">
+      <span class="ai-card-icon">Lightbulb</span>
+      <h4 class="ai-card-title">Conseil IA</h4>
+    </div>
+    <div class="ai-card-content">
+      <p style="font-style: italic; color: #1a73e8; margin: 0;">
+        {{ note.smart_advice }}
+      </p>
+    </div>
+  </div>
+{% endif %}
         <!-- Tags Section -->
         <div class="tags-section">
           <h3 class="tags-title">🏷️ Tags</h3>

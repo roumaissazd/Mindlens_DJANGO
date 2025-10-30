@@ -19,7 +19,7 @@ from .models import Note
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import re
-
+from transformers import pipeline
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,9 @@ _sentiment_pipeline = None
 _zero_shot_pipeline = None
 _summarizer = None
 _title_generator = None
+_advice_generator = None
+
+
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 
 def get_sentiment_pipeline():
@@ -576,3 +579,49 @@ def auto_generate_note_title(sender, instance, created, **kwargs):
         instance.title = title
         instance.save(update_fields=['title'])
         logger.info(f"Titre IA généré pour note {instance.id} : '{title}'")
+
+
+def get_advice_generator():
+    global _advice_generator
+    if _advice_generator is None:
+        _advice_generator = pipeline(
+            "text2text-generation",
+            model="moussaKam/barthez-orangesum-title",
+            max_length=100
+        )
+    return _advice_generator
+
+def generate_smart_advice(text: str) -> str:
+    """
+    IA qui donne un conseil personnalisé intelligent.
+    """
+    if not text or len(text) < 10:
+        return "Prends soin de toi."
+
+    # Détecte des mots clés
+    text_lower = text.lower()
+    conseils = []
+
+    if any(word in text_lower for word in ['fatigué', 'fatigue', 'dormir', 'sommeil']):
+        conseils.append("Bois de l’eau, dors tôt, évite les écrans.")
+    if any(word in text_lower for word in ['médecin', 'rdv', 'rendez-vous']):
+        conseils.append("Programme ton appel médecin demain matin.")
+    if any(word in text_lower for word in ['triste', 'perdu', 'reflexion']):
+        conseils.append("Écris tes pensées, respire, parle à quelqu’un.")
+    if any(word in text_lower for word in ['parc', 'couru', 'sport']):
+        conseils.append("Super ! Continue, ton corps te remercie.")
+    if any(word in text_lower for word in ['deadline', 'travail', 'réunion']):
+        conseils.append("Fais une pause de 5 min toutes les heures.")
+
+    # Si pas de règle → IA génère
+    if not conseils:
+        try:
+            generator = get_advice_generator()
+            prompt = f"Donne un conseil court et bienveillant pour : {text[:200]}"
+            result = generator(prompt, max_length=60)[0]['generated_text']
+            return result.strip()
+        except:
+            return "Écoute ton corps, il sait ce dont tu as besoin."
+
+    # Sinon, combine les conseils
+    return " ".join(conseils[:2])
