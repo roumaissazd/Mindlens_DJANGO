@@ -7,13 +7,8 @@ import numpy as np
 from PIL import Image
 import cv2
 
-try:
-    from deepface import DeepFace
-    DEEPFACE_AVAILABLE = True
-except ImportError:
-    DEEPFACE_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("DeepFace not available, face recognition will be limited")
+# Defer DeepFace import to runtime to avoid TensorFlow loading at startup on Render Free
+DEEPFACE_AVAILABLE = None  # unknown until first use
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -24,10 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Preferred detector backends to try (order = try first -> fallbacks)
 ENV_BACKEND = os.environ.get("DETECTOR_BACKEND", "").strip().lower()
-if DEEPFACE_AVAILABLE:
-    PREFERRED_BACKENDS = ([ENV_BACKEND] if ENV_BACKEND else []) + ['opencv', 'mtcnn', 'ssd', 'dlib']
-else:
-    PREFERRED_BACKENDS = ['opencv']  # Fallback to OpenCV only
+# Build preferred backends list (will still fallback to opencv if DeepFace absent)
+PREFERRED_BACKENDS = ([ENV_BACKEND] if ENV_BACKEND else []) + ['opencv', 'mtcnn', 'ssd', 'dlib']
 # Ensure unique order
 PREFERRED_BACKENDS = [b for i, b in enumerate(PREFERRED_BACKENDS) if b and b not in PREFERRED_BACKENDS[:i]]
 
@@ -50,6 +43,13 @@ def _try_deepface_represent(img_input: Any, model_name: str = MODEL_NAME, detect
     img_input may be a filesystem path or a numpy array (RGB).
     Returns embedding list or None.
     """
+    global DEEPFACE_AVAILABLE
+    if DEEPFACE_AVAILABLE is None:
+        try:
+            from deepface import DeepFace  # type: ignore
+            DEEPFACE_AVAILABLE = True
+        except Exception:
+            DEEPFACE_AVAILABLE = False
     if not DEEPFACE_AVAILABLE:
         logger.warning("DeepFace not available, cannot compute embeddings")
         return None
@@ -159,6 +159,13 @@ def _try_deepface_extract_faces(img_path: str, detector_backend: Optional[str] =
     Call DeepFace.extract_faces with retries over backends.
     Returns DeepFace.extract_faces result ou liste vide.
     """
+    global DEEPFACE_AVAILABLE
+    if DEEPFACE_AVAILABLE is None:
+        try:
+            from deepface import DeepFace  # type: ignore
+            DEEPFACE_AVAILABLE = True
+        except Exception:
+            DEEPFACE_AVAILABLE = False
     if not DEEPFACE_AVAILABLE:
         logger.warning("DeepFace not available, using OpenCV fallback")
         return _opencv_extract_faces(img_path)
