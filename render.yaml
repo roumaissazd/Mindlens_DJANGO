@@ -7,7 +7,7 @@ services:
     name: mindlens-django
     env: python
     plan: free
-    buildCommand: bash build.sh
+    buildCommand: ./build.sh
     startCommand: gunicorn mindlens_proj.wsgi:application
     autoDeploy: true
     envVars:
