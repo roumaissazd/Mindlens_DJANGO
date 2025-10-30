@@ -30,8 +30,6 @@ _zero_shot_pipeline = None
 _summarizer = None
 _title_generator = None
 _advice_generator = None
-tokenizer = AutoTokenizer.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
-model = AutoModelForSeq2SeqLM.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
 
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 
@@ -340,10 +338,13 @@ def get_summarizer():
     if _summarizer is None:
         try:
             device = 0 if torch.cuda.is_available() else -1  # GPU si dispo
+            # Charger explicitement le tokenizer "slow" (SentencePiece)
+            tok = AutoTokenizer.from_pretrained("plguillou/t5-base-fr-sum-cnndm", use_fast=False)
+            mdl = AutoModelForSeq2SeqLM.from_pretrained("plguillou/t5-base-fr-sum-cnndm")
             _summarizer = pipeline(
                 "summarization",
-                model="plguillou/t5-base-fr-sum-cnndm",
-                tokenizer="plguillou/t5-base-fr-sum-cnndm",
+                model=mdl,
+                tokenizer=tok,
                 device=device
             )
             logger.info("Summarizer chargé avec succès !")
